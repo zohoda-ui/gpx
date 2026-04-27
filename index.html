@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPX Pro Visualizer | Tistory Edition</title>
+    
+    <!-- External Libraries -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gpxparser/dist/GPXParser.min.js"></script>
+    
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>GPX Path Tracker</h1>
+        <p style="color: var(--text-muted);">전문화된 아웃도어 활동 분석 및 경로 시각화</p>
+    </header>
+
+    <div class="file-input-wrapper">
+        <label for="fileInput" class="custom-file-upload">
+            GPX 파일 업로드
+        </label>
+        <input id="fileInput" type="file" accept=".gpx" />
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <span class="stat-label">거리</span>
+            <span id="dist" class="stat-value">0.00 km</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">획득 고도</span>
+            <span id="gain" class="stat-value">0 m</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">최고 고도</span>
+            <span id="max-ele" class="stat-value">0 m</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">최저 고도</span>
+            <span id="min-ele" class="stat-value">0 m</span>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div id="map"></div>
+        <div class="chart-container">
+            <canvas id="elevationChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Core Logic -->
+<script src="app.js"></script>
+
+</body>
+</html>
