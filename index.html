@@ -19,7 +19,6 @@
 <div class="container">
     <header>
         <h1>GPX Path Tracker</h1>
-        <p style="color: var(--text-muted);">전문화된 아웃도어 활동 분석 및 경로 시각화</p>
     </header>
 
     <div class="file-input-wrapper">
@@ -27,6 +26,13 @@
             GPX 파일 업로드
         </label>
         <input id="fileInput" type="file" accept=".gpx" />
+    </div>
+
+    <div class="main-content">
+        <div id="map"></div>
+        <div class="chart-container">
+            <canvas id="elevationChart"></canvas>
+        </div>
     </div>
 
     <div class="stats-grid">
@@ -45,13 +51,6 @@
         <div class="stat-card">
             <span class="stat-label">최저 고도</span>
             <span id="min-ele" class="stat-value">0 m</span>
-        </div>
-    </div>
-
-    <div class="main-content">
-        <div id="map"></div>
-        <div class="chart-container">
-            <canvas id="elevationChart"></canvas>
         </div>
     </div>
 </div>
