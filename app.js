@@ -65,8 +65,6 @@ function updateStats(track, distances) {
 
     document.getElementById('dist').innerText = `${totalDist} km`;
     document.getElementById('gain').innerText = `${gain.toFixed(0)} m`;
-    document.getElementById('max-ele').innerText = `${maxEle} m`;
-    document.getElementById('min-ele').innerText = `${minEle} m`;
 }
 
 function renderChart(distances, elevations, points) {
