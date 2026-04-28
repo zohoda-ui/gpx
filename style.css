@@ -125,6 +125,8 @@ h1 {
     }
     #map, .chart-container {
         height: 280px;
+        flex: none;
+        width: 100%;
     }
     .stat-card {
         padding: 12px;
