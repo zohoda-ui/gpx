@@ -178,18 +178,14 @@ function renderChart(distances, elevations, points) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            animation: false,          // 차트 자체 애니메이션 OFF
+            animation: false,
+            interaction: {
+                mode: 'index',        // x축 기준으로 가장 가까운 데이터 인덱스
+                intersect: false      // 선 위가 아니어도 감지
+            },
             plugins: {
                 legend: { display: false },
-                tooltip: {
-                    enabled: true,
-                    mode: 'index',
-                    intersect: false,
-                    callbacks: {
-                        label: (c) => `고도: ${c.parsed.y} m`,
-                        title: (c) => `거리: ${c[0].label} km`
-                    }
-                }
+                tooltip: { enabled: false }   // 기본 툴팁 OFF → info-panel + crosshair 사용
             },
             scales: {
                 x: {
@@ -203,23 +199,43 @@ function renderChart(distances, elevations, points) {
                     ticks: { color: '#6b7280' }
                 }
             },
-            /* 차트 자체 호버 → 지도 마커 연동 */
+            /* 차트 호버 → info-panel + crosshair + 지도마커 연동 */
             onHover: (event, activeElements) => {
                 const hoverDist = document.getElementById('hover-dist');
                 const hoverEle  = document.getElementById('hover-ele');
+                const crosshair = document.getElementById('chart-crosshair');
+
                 if (activeElements.length > 0) {
-                    const i = activeElements[0].index;
+                    const i    = activeElements[0].index;
+                    const meta = chart.getDatasetMeta(0);
+                    const pt   = meta.data[i];
+
+                    // 지도 마커 이동
                     elevationMarker.setLatLng(points[i]);
                     elevationMarker.setOpacity(1);
+
+                    // info-panel 숫자 업데이트
                     if (hoverDist) { hoverDist.textContent = gpxDistances[i].toFixed(2) + ' km'; hoverDist.classList.add('active'); }
                     if (hoverEle)  { hoverEle.textContent  = gpxElevations[i].toFixed(0) + ' m';  hoverEle.classList.add('active'); }
+
+                    // crosshair div 이동
+                    if (crosshair && pt) {
+                        const canvasRect    = document.getElementById('elevationChart').getBoundingClientRect();
+                        const containerRect = document.querySelector('.chart-container').getBoundingClientRect();
+                        crosshair.style.left    = (canvasRect.left - containerRect.left + pt.x) + 'px';
+                        crosshair.style.top     = (canvasRect.top  - containerRect.top  + chart.chartArea.top) + 'px';
+                        crosshair.style.height  = (chart.chartArea.bottom - chart.chartArea.top) + 'px';
+                        crosshair.style.display = 'block';
+                    }
                 } else {
                     elevationMarker.setOpacity(0);
                     if (hoverDist) { hoverDist.textContent = '—'; hoverDist.classList.remove('active'); }
                     if (hoverEle)  { hoverEle.textContent  = '—'; hoverEle.classList.remove('active'); }
+                    if (crosshair) crosshair.style.display = 'none';
                 }
             }
         }
+
     });
 }
 
