@@ -1,5 +1,38 @@
 let map, chart, elevationMarker;
+let gpxPoints = [], gpxDistances = [], gpxElevations = [];
 const parser = new gpxParser();
+
+// 지도 위 커스텀 툴팁 생성
+const mapTooltip = document.createElement('div');
+mapTooltip.id = 'map-tooltip';
+mapTooltip.style.cssText = [
+    'position:fixed',
+    'background:rgba(15,23,42,0.88)',
+    'color:#fff',
+    'padding:8px 13px',
+    'border-radius:10px',
+    'font-size:0.82rem',
+    'font-family:Inter,sans-serif',
+    'pointer-events:none',
+    'display:none',
+    'z-index:9999',
+    'white-space:nowrap',
+    'box-shadow:0 4px 16px rgba(0,0,0,0.25)',
+    'border:1px solid rgba(59,130,246,0.4)',
+    'line-height:1.7'
+].join(';');
+document.body.appendChild(mapTooltip);
+
+// 마우스에 가장 가까운 GPX 포인트 인덱스 반환
+function findNearestIndex(latlng) {
+    let minDist = Infinity, idx = 0;
+    for (let i = 0; i < gpxPoints.length; i++) {
+        const d = map.latLngToLayerPoint(L.latLng(gpxPoints[i])).distanceTo(
+                  map.latLngToLayerPoint(latlng));
+        if (d < minDist) { minDist = d; idx = i; }
+    }
+    return idx;
+}
 
 function initMap() {
     map = L.map('map', {
@@ -26,9 +59,38 @@ function processGPX(xml) {
     const elevations = track.points.map(p => p.ele);
     const distances = calculateDistances(track.points);
 
+    // 전역에 저장 (툴팁 참조용)
+    gpxPoints = points;
+    gpxDistances = distances;
+    gpxElevations = elevations;
+
     // Update Map
     const polyline = L.polyline(points, { color: '#3b82f6', weight: 5, opacity: 0.8 }).addTo(map);
     map.fitBounds(polyline.getBounds());
+
+    // 경로 위 마우스 이벤트 → 커스텀 툴팁
+    polyline.on('mousemove', function(e) {
+        const idx = findNearestIndex(e.latlng);
+        const dist = gpxDistances[idx].toFixed(2);
+        const ele  = gpxElevations[idx].toFixed(0);
+
+        // 마커 이동
+        elevationMarker.setLatLng(gpxPoints[idx]);
+        elevationMarker.setOpacity(1);
+
+        // 툴팁 내용 및 위치
+        mapTooltip.innerHTML =
+            `<span style="color:#93c5fd">📍 거리</span> <b>${dist} km</b><br>` +
+            `<span style="color:#6ee7b7">⛰️ 고도</span> <b>${ele} m</b>`;
+        mapTooltip.style.display = 'block';
+        mapTooltip.style.left = (e.originalEvent.clientX + 14) + 'px';
+        mapTooltip.style.top  = (e.originalEvent.clientY - 10) + 'px';
+    });
+
+    polyline.on('mouseout', function() {
+        elevationMarker.setOpacity(0);
+        mapTooltip.style.display = 'none';
+    });
 
     // Add Start/End Markers
     L.marker(points[0]).addTo(map).bindPopup('Start');
