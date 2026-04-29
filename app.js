@@ -2,7 +2,9 @@ let map, chart, elevationMarker;
 const parser = new gpxParser();
 
 function initMap() {
-    map = L.map('map').setView([37.5665, 126.9780], 13);
+    map = L.map('map', {
+        scrollWheelZoom: false
+    }).setView([37.5665, 126.9780], 13);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://carto.com/attributions">CARTO</a>'
     }).addTo(map);
