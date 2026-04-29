@@ -115,14 +115,73 @@ input[type="file"] {
     border-radius: 16px;
     box-shadow: var(--shadow-premium);
     display: flex;
+    flex-direction: column;   /* 수직 스택 */
+    gap: 10px;
+    position: relative;
+}
+
+/* ── 실시간 정보 패널 ── */
+#info-panel {
+    flex-shrink: 0;
+    display: flex;
     align-items: center;
     justify-content: center;
-    position: relative;
+    gap: 0;
+    background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(37,99,235,0.06));
+    border: 1px solid rgba(59,130,246,0.2);
+    border-radius: 12px;
+    padding: 10px 14px;
+    min-height: 64px;
+}
+
+.info-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    justify-content: center;
+}
+
+.info-icon {
+    font-size: 1.2rem;
+    line-height: 1;
+}
+
+.info-label {
+    display: block;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 1px;
+}
+
+.info-value {
+    display: block;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--accent-primary);
+    font-family: 'Outfit', sans-serif;
+    transition: color 0.2s ease;
+}
+
+.info-value.active {
+    color: #2563eb;
+}
+
+.info-divider {
+    width: 1px;
+    height: 36px;
+    background: rgba(59,130,246,0.25);
+    flex-shrink: 0;
+    margin: 0 4px;
 }
 
 canvas {
     width: 100% !important;
     height: 100% !important;
+    flex: 1;          /* 남은 공간 모두 */
+    min-height: 0;
 }
 
 /* ── 통계 카드 ── */

@@ -31,6 +31,24 @@
     <div class="main-content">
         <div id="map"></div>
         <div class="chart-container">
+            <!-- 실시간 정보 패널 -->
+            <div id="info-panel">
+                <div class="info-item">
+                    <span class="info-icon">📍</span>
+                    <div>
+                        <span class="info-label">거리</span>
+                        <span id="hover-dist" class="info-value">—</span>
+                    </div>
+                </div>
+                <div class="info-divider"></div>
+                <div class="info-item">
+                    <span class="info-icon">⛰️</span>
+                    <div>
+                        <span class="info-label">고도</span>
+                        <span id="hover-ele" class="info-value">—</span>
+                    </div>
+                </div>
+            </div>
             <canvas id="elevationChart"></canvas>
         </div>
     </div>

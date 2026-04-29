@@ -2,6 +2,55 @@ let map, chart, elevationMarker;
 let gpxPoints = [], gpxDistances = [], gpxElevations = [];
 const parser = new gpxParser();
 
+/* ── Chart.js 수직선 커스텀 플러그인 ── */
+const crosshairPlugin = {
+    id: 'crosshair',
+    afterDraw(chartInstance) {
+        if (chartInstance._hoverIndex == null) return;
+        const ctx  = chartInstance.ctx;
+        const meta = chartInstance.getDatasetMeta(0);
+        const pt   = meta.data[chartInstance._hoverIndex];
+        if (!pt) return;
+        const { top, bottom } = chartInstance.chartArea;
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = 'rgba(59,130,246,0.7)';
+        ctx.lineWidth = 1.5;
+        ctx.moveTo(pt.x, top);
+        ctx.lineTo(pt.x, bottom);
+        ctx.stroke();
+        // 점 하이라이트
+        ctx.beginPath();
+        ctx.setLineDash([]);
+        ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#3b82f6';
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+    }
+};
+Chart.register(crosshairPlugin);
+
+/* ── info-panel 업데이트 ── */
+function updateInfoPanel(dist, ele) {
+    const distEl = document.getElementById('hover-dist');
+    const eleEl  = document.getElementById('hover-ele');
+    if (dist == null) {
+        distEl.textContent = '—';
+        eleEl.textContent  = '—';
+        distEl.classList.remove('active');
+        eleEl.classList.remove('active');
+    } else {
+        distEl.textContent = dist + ' km';
+        eleEl.textContent  = ele  + ' m';
+        distEl.classList.add('active');
+        eleEl.classList.add('active');
+    }
+}
+
 // 지도 위 커스텀 툴팁 생성
 const mapTooltip = document.createElement('div');
 mapTooltip.id = 'map-tooltip';
@@ -70,11 +119,11 @@ function processGPX(xml) {
 
     // 경로 위 마우스 이벤트 → 커스텀 툴팁
     polyline.on('mousemove', function(e) {
-        const idx = findNearestIndex(e.latlng);
+        const idx  = findNearestIndex(e.latlng);
         const dist = gpxDistances[idx].toFixed(2);
         const ele  = gpxElevations[idx].toFixed(0);
 
-        // 마커 이동
+        // 지도 마커 이동
         elevationMarker.setLatLng(gpxPoints[idx]);
         elevationMarker.setOpacity(1);
 
@@ -85,11 +134,25 @@ function processGPX(xml) {
         mapTooltip.style.display = 'block';
         mapTooltip.style.left = (e.originalEvent.clientX + 14) + 'px';
         mapTooltip.style.top  = (e.originalEvent.clientY - 10) + 'px';
+
+        // 고도 차트 수직선 연동
+        if (chart) {
+            chart._hoverIndex = idx;
+            chart.update('none');   // 애니메이션 없이 수직선만 직접 내로
+        }
+
+        // info-panel 업데이트
+        updateInfoPanel(dist, ele);
     });
 
     polyline.on('mouseout', function() {
         elevationMarker.setOpacity(0);
         mapTooltip.style.display = 'none';
+        if (chart) {
+            chart._hoverIndex = null;
+            chart.update('none');
+        }
+        updateInfoPanel(null);
     });
 
     // Add Start/End Markers
