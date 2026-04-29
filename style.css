@@ -17,6 +17,11 @@
     box-sizing: border-box;
 }
 
+html, body {
+    height: 100%;
+    overflow: hidden;
+}
+
 body {
     font-family: 'Inter', sans-serif;
     background: var(--bg-color);
@@ -25,139 +30,38 @@ body {
     padding: 10px;
     display: flex;
     justify-content: center;
-    align-items: center;
-    height: 100vh;
-    margin: 0;
-    overflow: hidden;
-    box-sizing: border-box;
+    align-items: flex-start;
 }
 
 .container {
     width: 100%;
-    height: 100%;
+    height: calc(100vh - 20px);
     max-width: 1000px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
 }
 
+/* ── 헤더 ── */
 header {
     text-align: center;
-    margin-bottom: 5px;
+    flex-shrink: 0;
 }
 
 h1 {
     font-family: 'Outfit', sans-serif;
     font-weight: 800;
-    font-size: 2.5rem;
+    font-size: 2rem;
     background: linear-gradient(to right, var(--accent-primary), var(--accent-secondary));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
 }
 
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-}
-
-.stat-card {
-    background: var(--card-bg);
-    backdrop-filter: blur(12px);
-    border: 1px solid var(--glass-border);
-    padding: 20px;
-    border-radius: 16px;
-    text-align: center;
-    box-shadow: var(--shadow-premium);
-    transition: transform 0.3s ease;
-}
-
-.stat-card:hover {
-    transform: translateY(-5px);
-}
-
-.stat-value {
-    display: block;
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--accent-primary);
-}
-
-.stat-label {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-.main-content {
-    display: flex;
-    flex-direction: row;
-    gap: 15px;
-    align-items: stretch;
-    flex: 1;
-    min-height: 0;
-}
-
-#map {
-    height: 100%;
-    flex: 3;
-    border-radius: 20px;
-    border: 1px solid var(--glass-border);
-    box-shadow: var(--shadow-premium);
-    z-index: 1;
-}
-
-.chart-container {
-    background: var(--card-bg);
-    backdrop-filter: blur(12px);
-    border: 1px solid var(--glass-border);
-    padding: 15px;
-    border-radius: 20px;
-    box-shadow: var(--shadow-premium);
-    position: relative;
-    height: 100%;
-    flex: 1;
-}
-
-@media (max-width: 768px) {
-    body {
-        padding: 10px;
-    }
-    .main-content {
-        flex-direction: column;
-        gap: 15px;
-    }
-    #map {
-        height: auto;
-        flex: 2;
-        width: 100%;
-    }
-    .chart-container {
-        height: auto;
-        flex: 1;
-        width: 100%;
-    }
-    .stat-card {
-        padding: 12px;
-    }
-    .stats-grid {
-        gap: 10px;
-    }
-    h1 {
-        font-size: 1.5rem;
-    }
-}
-
-canvas {
-    width: 100% !important;
-    height: 100% !important;
-}
-
+/* ── 파일 업로드 ── */
 .file-input-wrapper {
     text-align: center;
-    margin-bottom: 20px;
+    flex-shrink: 0;
 }
 
 input[type="file"] {
@@ -166,14 +70,15 @@ input[type="file"] {
 
 .custom-file-upload {
     display: inline-block;
-    padding: 12px 24px;
+    padding: 10px 24px;
     cursor: pointer;
     background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
     color: white;
     font-weight: 600;
     border-radius: 30px;
-    box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4);
+    box-shadow: 0 4px 15px rgba(56, 130, 246, 0.35);
     transition: all 0.3s ease;
+    font-size: 0.9rem;
 }
 
 .custom-file-upload:hover {
@@ -181,7 +86,102 @@ input[type="file"] {
     transform: scale(1.05);
 }
 
-/* Leaflet Customization */
+/* ── 지도 + 고도 차트 영역 ── */
+.main-content {
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    flex: 1;          /* 남은 공간을 모두 차지 */
+    min-height: 0;    /* flex 자식이 overflow 되지 않도록 */
+}
+
+#map {
+    flex: 3;
+    min-width: 0;
+    border-radius: 16px;
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--shadow-premium);
+    z-index: 1;
+    /* Leaflet은 부모 높이를 참조하므로 height를 명시적으로 지정하지 않고 flex로 채움 */
+}
+
+.chart-container {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    background: var(--card-bg);
+    border: 1px solid var(--glass-border);
+    padding: 12px;
+    border-radius: 16px;
+    box-shadow: var(--shadow-premium);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* ── 통계 카드 ── */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--glass-border);
+    padding: 14px 20px;
+    border-radius: 14px;
+    text-align: center;
+    box-shadow: var(--shadow-premium);
+    transition: transform 0.3s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-4px);
+}
+
+.stat-value {
+    display: block;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--accent-primary);
+}
+
+.stat-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* ── 반응형 (모바일) ── */
+@media (max-width: 640px) {
+    .main-content {
+        flex-direction: column;
+    }
+
+    #map {
+        flex: 2;
+    }
+
+    .chart-container {
+        flex: 1;
+    }
+
+    h1 {
+        font-size: 1.4rem;
+    }
+}
+
+/* ── Leaflet 커스텀 ── */
 .leaflet-container {
-    background: #0f172a !important;
+    background: #e8f0fe !important;
+    border-radius: 16px;
 }

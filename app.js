@@ -149,6 +149,8 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
 // For Tistory, we might want to load a file via URL if provided in a data attribute
 window.onload = () => {
     initMap();
+    // flex 레이아웃 내에서 지도 크기를 올바르게 재계산
+    setTimeout(() => map.invalidateSize(), 100);
     // Check if there is a sample file or initial file to load
     fetch('sample.gpx')
         .then(response => response.text())
