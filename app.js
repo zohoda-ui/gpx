@@ -2,149 +2,116 @@ let map, chart, elevationMarker;
 let gpxPoints = [], gpxDistances = [], gpxElevations = [];
 const parser = new gpxParser();
 
-/* ── Chart.js 수직선 커스텀 플러그인 ── */
-const crosshairPlugin = {
-    id: 'crosshair',
-    afterDraw(chartInstance) {
-        if (chartInstance._hoverIndex == null) return;
-        const meta = chartInstance.getDatasetMeta(0);
-        const pt   = meta.data[chartInstance._hoverIndex];
-        if (!pt) return;
-        const ctx = chartInstance.ctx;
-        const { top, bottom } = chartInstance.chartArea;
-        ctx.save();
-        // 수직 점선
-        ctx.beginPath();
-        ctx.setLineDash([4, 4]);
-        ctx.strokeStyle = 'rgba(59,130,246,0.7)';
-        ctx.lineWidth = 1.5;
-        ctx.moveTo(pt.x, top);
-        ctx.lineTo(pt.x, bottom);
-        ctx.stroke();
-        // 포인트 원
-        ctx.beginPath();
-        ctx.setLineDash([]);
-        ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
-        ctx.fillStyle = '#3b82f6';
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-    }
-};
-
-/* ── info-panel 업데이트 ── */
-function updateInfoPanel(dist, ele) {
-    const distEl = document.getElementById('hover-dist');
-    const eleEl  = document.getElementById('hover-ele');
-    if (!distEl || !eleEl) return;
-
-    if (dist == null) {
-        distEl.textContent = '—';
-        eleEl.textContent  = '—';
-        distEl.classList.remove('active');
-        eleEl.classList.remove('active');
-    } else {
-        distEl.textContent = dist + ' km';
-        eleEl.textContent  = ele  + ' m';
-        distEl.classList.add('active');
-        eleEl.classList.add('active');
-    }
-}
-
-/* ── 마우스에 가장 가까운 GPX 포인트 인덱스 반환 ── */
-function findNearestIndex(latlng) {
-    let minDist = Infinity, idx = 0;
-    for (let i = 0; i < gpxPoints.length; i++) {
-        const d = map.latLngToLayerPoint(L.latLng(gpxPoints[i]))
-                     .distanceTo(map.latLngToLayerPoint(latlng));
-        if (d < minDist) { minDist = d; idx = i; }
-    }
-    return idx;
-}
-
 /* ── 지도 초기화 ── */
 function initMap() {
     map = L.map('map', { scrollWheelZoom: false })
-            .setView([37.5665, 126.9780], 13);
+           .setView([37.5665, 126.9780], 13);
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; <a href="https://carto.com/attributions">CARTO</a>'
     }).addTo(map);
 
     elevationMarker = L.circleMarker([0, 0], {
-        radius: 8,
-        fillColor: '#3b82f6',
-        color: '#fff',
-        weight: 2,
-        fillOpacity: 1
+        radius: 8, fillColor: '#3b82f6',
+        color: '#fff', weight: 2, fillOpacity: 1
     }).addTo(map);
     elevationMarker.setOpacity(0);
 
-    // ── 지도 전체 mousemove: 경로 근처(30px)면 툴팁 표시 ──
-    const mapTooltip = document.getElementById('map-tooltip');
+    /* ── rAF 스로틀링 적용 mousemove ── */
+    let rafId = null;
+    const tooltip  = document.getElementById('map-tooltip');
+    const hoverDist = document.getElementById('hover-dist');
+    const hoverEle  = document.getElementById('hover-ele');
+    const crosshair = document.getElementById('chart-crosshair');
 
     map.on('mousemove', function(e) {
-        if (!gpxPoints.length) return;
+        if (rafId) return;           // 이전 프레임 처리 중이면 스킵
+        rafId = requestAnimationFrame(() => {
+            rafId = null;
+            if (!gpxPoints.length) return;
 
-        const idx         = findNearestIndex(e.latlng);
-        const nearestPx   = map.latLngToLayerPoint(L.latLng(gpxPoints[idx]));
-        const mousePx     = map.latLngToLayerPoint(e.latlng);
-        const pixelDist   = nearestPx.distanceTo(mousePx);
+            /* 가장 가까운 포인트 탐색 */
+            let minD = Infinity, idx = 0;
+            const mp = map.latLngToLayerPoint(e.latlng);
+            for (let i = 0; i < gpxPoints.length; i++) {
+                const d = map.latLngToLayerPoint(
+                    L.latLng(gpxPoints[i][0], gpxPoints[i][1])
+                ).distanceTo(mp);
+                if (d < minD) { minD = d; idx = i; }
+            }
 
-        if (pixelDist > 30) {
-            // 경로에서 멀면 숨김
-            elevationMarker.setOpacity(0);
-            mapTooltip.style.display = 'none';
-            if (chart) { chart._hoverIndex = null; chart.update('none'); }
-            updateInfoPanel(null);
-            return;
-        }
+            /* 경로에서 60px 초과 시 숨김 */
+            if (minD > 60) {
+                elevationMarker.setOpacity(0);
+                tooltip.style.display = 'none';
+                if (crosshair) crosshair.style.display = 'none';
+                if (hoverDist) hoverDist.textContent = '—';
+                if (hoverEle)  hoverEle.textContent  = '—';
+                if (hoverDist) hoverDist.classList.remove('active');
+                if (hoverEle)  hoverEle.classList.remove('active');
+                return;
+            }
 
-        const dist = gpxDistances[idx].toFixed(2);
-        const ele  = gpxElevations[idx].toFixed(0);
+            const dist = gpxDistances[idx].toFixed(2);
+            const ele  = gpxElevations[idx].toFixed(0);
 
-        // 지도 마커
-        elevationMarker.setLatLng(gpxPoints[idx]);
-        elevationMarker.setOpacity(1);
+            /* 지도 마커 */
+            elevationMarker.setLatLng([gpxPoints[idx][0], gpxPoints[idx][1]]);
+            elevationMarker.setOpacity(1);
 
-        // 지도 위 툴팁
-        mapTooltip.innerHTML =
-            `<span style="color:#93c5fd">📍 거리</span> <b>${dist} km</b><br>` +
-            `<span style="color:#6ee7b7">⛰️ 고도</span> <b>${ele} m</b>`;
-        mapTooltip.style.display = 'block';
-        mapTooltip.style.left = (e.originalEvent.clientX + 14) + 'px';
-        mapTooltip.style.top  = (e.originalEvent.clientY - 10) + 'px';
+            /* 지도 위 팝업 툴팁 */
+            tooltip.innerHTML =
+                `<span style="color:#93c5fd">📍 거리</span> <b>${dist} km</b><br>` +
+                `<span style="color:#6ee7b7">⛰️ 고도</span> <b>${ele} m</b>`;
+            tooltip.style.display = 'block';
+            tooltip.style.left = (e.originalEvent.clientX + 16) + 'px';
+            tooltip.style.top  = (e.originalEvent.clientY - 14) + 'px';
 
-        // 고도차트 수직선 연동
-        if (chart) {
-            chart._hoverIndex = idx;
-            chart.update('none');
-        }
+            /* info-panel 숫자 */
+            if (hoverDist) { hoverDist.textContent = dist + ' km'; hoverDist.classList.add('active'); }
+            if (hoverEle)  { hoverEle.textContent  = ele  + ' m';  hoverEle.classList.add('active'); }
 
-        // info-panel 숫자 업데이트
-        updateInfoPanel(dist, ele);
+            /* 차트 수직선 (chart.update 없이 CSS div 이동) */
+            if (chart && crosshair) {
+                const meta = chart.getDatasetMeta(0);
+                const pt   = meta.data[idx];
+                if (pt) {
+                    const canvasRect = document.getElementById('elevationChart').getBoundingClientRect();
+                    const containerRect = document.querySelector('.chart-container').getBoundingClientRect();
+                    // 캔버스 왼쪽 기준 pt.x → 컨테이너 기준 left 계산
+                    crosshair.style.left    = (canvasRect.left - containerRect.left + pt.x) + 'px';
+                    crosshair.style.top     = (canvasRect.top  - containerRect.top  + chart.chartArea.top) + 'px';
+                    crosshair.style.height  = (chart.chartArea.bottom - chart.chartArea.top) + 'px';
+                    crosshair.style.display = 'block';
+                }
+            }
+        });
     });
 
     map.on('mouseout', function() {
+        if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
         elevationMarker.setOpacity(0);
-        mapTooltip.style.display = 'none';
-        if (chart) { chart._hoverIndex = null; chart.update('none'); }
-        updateInfoPanel(null);
+        const tooltip   = document.getElementById('map-tooltip');
+        const crosshair = document.getElementById('chart-crosshair');
+        const hoverDist = document.getElementById('hover-dist');
+        const hoverEle  = document.getElementById('hover-ele');
+        if (tooltip)   tooltip.style.display   = 'none';
+        if (crosshair) crosshair.style.display = 'none';
+        if (hoverDist) { hoverDist.textContent = '—'; hoverDist.classList.remove('active'); }
+        if (hoverEle)  { hoverEle.textContent  = '—'; hoverEle.classList.remove('active'); }
     });
 }
 
-/* ── GPX 파싱 및 렌더링 ── */
+/* ── GPX 파싱 ── */
 function processGPX(xml) {
     parser.parse(xml);
-    const track     = parser.tracks[0];
-    const points    = track.points.map(p => [p.lat, p.lon]);
+    const track      = parser.tracks[0];
+    const points     = track.points.map(p => [p.lat, p.lon]);
     const elevations = track.points.map(p => p.ele);
-    const distances = calculateDistances(track.points);
+    const distances  = calculateDistances(track.points);
 
-    gpxPoints    = points;
-    gpxDistances = distances;
+    gpxPoints     = points;
+    gpxDistances  = distances;
     gpxElevations = elevations;
 
     const polyline = L.polyline(points, { color: '#3b82f6', weight: 5, opacity: 0.8 }).addTo(map);
@@ -211,6 +178,7 @@ function renderChart(distances, elevations, points) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: false,          // 차트 자체 애니메이션 OFF
             plugins: {
                 legend: { display: false },
                 tooltip: {
@@ -218,8 +186,8 @@ function renderChart(distances, elevations, points) {
                     mode: 'index',
                     intersect: false,
                     callbacks: {
-                        label: (ctx) => `고도: ${ctx.parsed.y} m`,
-                        title: (ctx) => `거리: ${ctx[0].label} km`
+                        label: (c) => `고도: ${c.parsed.y} m`,
+                        title: (c) => `거리: ${c[0].label} km`
                     }
                 }
             },
@@ -235,26 +203,27 @@ function renderChart(distances, elevations, points) {
                     ticks: { color: '#6b7280' }
                 }
             },
+            /* 차트 자체 호버 → 지도 마커 연동 */
             onHover: (event, activeElements) => {
+                const hoverDist = document.getElementById('hover-dist');
+                const hoverEle  = document.getElementById('hover-ele');
                 if (activeElements.length > 0) {
-                    const index = activeElements[0].index;
-                    elevationMarker.setLatLng(points[index]);
+                    const i = activeElements[0].index;
+                    elevationMarker.setLatLng(points[i]);
                     elevationMarker.setOpacity(1);
-
-                    // 차트 호버 시에도 info-panel 업데이트
-                    const dist = gpxDistances[index].toFixed(2);
-                    const ele  = gpxElevations[index].toFixed(0);
-                    updateInfoPanel(dist, ele);
+                    if (hoverDist) { hoverDist.textContent = gpxDistances[i].toFixed(2) + ' km'; hoverDist.classList.add('active'); }
+                    if (hoverEle)  { hoverEle.textContent  = gpxElevations[i].toFixed(0) + ' m';  hoverEle.classList.add('active'); }
                 } else {
                     elevationMarker.setOpacity(0);
-                    updateInfoPanel(null);
+                    if (hoverDist) { hoverDist.textContent = '—'; hoverDist.classList.remove('active'); }
+                    if (hoverEle)  { hoverEle.textContent  = '—'; hoverEle.classList.remove('active'); }
                 }
             }
         }
     });
 }
 
-/* ── 파일 업로드 이벤트 ── */
+/* ── 파일 업로드 ── */
 document.getElementById('fileInput').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -265,14 +234,10 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
 
 /* ── 앱 초기화 ── */
 window.onload = () => {
-    // Chart.js 플러그인 등록 (Chart가 로드된 후)
-    Chart.register(crosshairPlugin);
-
     initMap();
     setTimeout(() => map.invalidateSize(), 100);
-
     fetch('sample.gpx')
         .then(r => r.text())
         .then(xml => processGPX(xml))
-        .catch(() => console.log('No default file found.'));
+        .catch(() => console.log('No default file.'));
 };
