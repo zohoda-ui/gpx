@@ -27,7 +27,7 @@ body {
     background: var(--bg-color);
     color: var(--text-main);
     line-height: 1.6;
-    padding: 10px;
+    padding: 0;
     display: flex;
     justify-content: center;
     align-items: flex-start;
@@ -35,56 +35,13 @@ body {
 
 .container {
     width: 100%;
-    height: calc(100vh - 20px);
-    max-width: 1000px;
+    height: 100vh;
+    max-width: 1200px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 0;
 }
 
-/* ── 헤더 ── */
-header {
-    text-align: center;
-    flex-shrink: 0;
-}
-
-h1 {
-    font-family: 'Outfit', sans-serif;
-    font-weight: 800;
-    font-size: 2rem;
-    background: linear-gradient(to right, var(--accent-primary), var(--accent-secondary));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin-bottom: 4px;
-}
-
-/* ── 파일 업로드 ── */
-.file-input-wrapper {
-    text-align: center;
-    flex-shrink: 0;
-}
-
-input[type="file"] {
-    display: none;
-}
-
-.custom-file-upload {
-    display: inline-block;
-    padding: 10px 24px;
-    cursor: pointer;
-    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-    color: white;
-    font-weight: 600;
-    border-radius: 30px;
-    box-shadow: 0 4px 15px rgba(56, 130, 246, 0.35);
-    transition: all 0.3s ease;
-    font-size: 0.9rem;
-}
-
-.custom-file-upload:hover {
-    filter: brightness(1.1);
-    transform: scale(1.05);
-}
 
 /* ── 지도 + 고도 차트 영역 ── */
 .main-content {

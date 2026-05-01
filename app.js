@@ -2,6 +2,25 @@ let map, chart, elevationMarker;
 let gpxPoints = [], gpxDistances = [], gpxElevations = [];
 const parser = new gpxParser();
 
+/**
+ * URL 쿼리 파라미터 추출
+ */
+function getUrlParameter(name) {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get(name);
+}
+
+/**
+ * GitHub 일반 URL을 Raw URL로 변환 (CORS 대응)
+ */
+function convertToRawGitHub(url) {
+    if (!url) return url;
+    if (url.includes('github.com') && url.includes('/blob/')) {
+        return url.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/');
+    }
+    return url;
+}
+
 /* ── 지도 초기화 ── */
 function initMap() {
     map = L.map('map', { scrollWheelZoom: false })
@@ -239,21 +258,33 @@ function renderChart(distances, elevations, points) {
     });
 }
 
-/* ── 파일 업로드 ── */
-document.getElementById('fileInput').addEventListener('change', function(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function(ev) { processGPX(ev.target.result); };
-    reader.readAsText(file);
-});
 
 /* ── 앱 초기화 ── */
 window.onload = () => {
     initMap();
     setTimeout(() => map.invalidateSize(), 100);
+
+    const gpxUrl = getUrlParameter('gpx');
+    if (gpxUrl) {
+        const targetUrl = convertToRawGitHub(gpxUrl);
+        fetch(targetUrl)
+            .then(r => {
+                if (!r.ok) throw new Error('Network response was not ok');
+                return r.text();
+            })
+            .then(xml => processGPX(xml))
+            .catch(err => {
+                console.error('Failed to load GPX from URL:', err);
+                loadDefaultGPX();
+            });
+    } else {
+        loadDefaultGPX();
+    }
+};
+
+function loadDefaultGPX() {
     fetch('sample.gpx')
         .then(r => r.text())
         .then(xml => processGPX(xml))
         .catch(() => console.log('No default file.'));
-};
+}
