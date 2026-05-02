@@ -43,6 +43,28 @@
         .leaflet-container {
             cursor: crosshair;
         }
+        .gpx-summary {
+            display: flex;
+            justify-content: space-around;
+            padding: 16px;
+            background: #f9fafb;
+            border-top: 1px solid #e5e7eb;
+            font-size: 14px;
+        }
+        .summary-item {
+            text-align: center;
+        }
+        .summary-label {
+            display: block;
+            color: #6b7280;
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+        .summary-value {
+            color: #111827;
+            font-weight: 600;
+            font-size: 16px;
+        }
     </style>
 </head>
 <body>
@@ -52,6 +74,11 @@
     <div id="gpx-map" class="gpx-map" style="display: none;"></div>
     <div id="gpx-chart-container" class="gpx-chart-container" style="display: none;">
         <canvas id="gpx-elevation-chart"></canvas>
+    </div>
+    <div id="gpx-summary" class="gpx-summary" style="display: none;">
+        <div class="summary-item"><span class="summary-label">총 거리</span><span class="summary-value" id="summary-distance">-</span></div>
+        <div class="summary-item"><span class="summary-label">누적 상승고도</span><span class="summary-value" id="summary-ele-gain">-</span></div>
+        <div class="summary-item"><span class="summary-label">최고 / 최저 고도</span><span class="summary-value" id="summary-ele-maxmin">-</span></div>
     </div>
 </div>
 
@@ -106,6 +133,9 @@
             const path = [];
             const chartData = [];
             let totalDistance = 0;
+            let totalElevationGain = 0;
+            let maxElevation = -Infinity;
+            let minElevation = Infinity;
             
             // 데이터 추출
             for (let i = 0; i < trkpts.length; i++) {
@@ -120,7 +150,16 @@
                     const pLat = parseFloat(prevPt.getAttribute('lat'));
                     const pLon = parseFloat(prevPt.getAttribute('lon'));
                     totalDistance += calculateDistance(pLat, pLon, lat, lon);
+                    
+                    const prevEleNode = prevPt.getElementsByTagName('ele')[0];
+                    const prevEle = prevEleNode ? parseFloat(prevEleNode.textContent) : 0;
+                    if (ele > prevEle) {
+                        totalElevationGain += (ele - prevEle);
+                    }
                 }
+                
+                if (ele > maxElevation) maxElevation = ele;
+                if (ele < minElevation) minElevation = ele;
                 
                 path.push([lat, lon]);
                 chartData.push({
@@ -135,6 +174,14 @@
             document.getElementById('gpx-loading').style.display = 'none';
             document.getElementById('gpx-map').style.display = 'block';
             document.getElementById('gpx-chart-container').style.display = 'block';
+            document.getElementById('gpx-summary').style.display = 'flex';
+            
+            // 요약 정보 업데이트
+            document.getElementById('summary-distance').innerText = totalDistance.toFixed(2) + ' km';
+            document.getElementById('summary-ele-gain').innerText = Math.round(totalElevationGain) + ' m';
+            if (minElevation === Infinity) minElevation = 0;
+            if (maxElevation === -Infinity) maxElevation = 0;
+            document.getElementById('summary-ele-maxmin').innerText = Math.round(maxElevation) + ' m / ' + Math.round(minElevation) + ' m';
 
             // 지도 초기화
             const map = L.map('gpx-map', {
