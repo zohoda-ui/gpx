@@ -79,11 +79,258 @@
         <div class="summary-item"><span class="summary-label">총 거리</span><span class="summary-value" id="summary-distance">-</span></div>
         <div class="summary-item"><span class="summary-label">누적 상승고도</span><span class="summary-value" id="summary-ele-gain">-</span></div>
         <div class="summary-item"><span class="summary-label">최고 / 최저 고도</span><span class="summary-value" id="summary-ele-maxmin">-</span></div>
+        <div class="summary-item">
+            <span class="summary-label">코스 유형</span>
+            <select id="course-type-select" onchange="updateCourseType()" style="font-size: 14px; padding: 2px 6px; border: 1px solid #d1d5db; border-radius: 6px; outline: none; background: #fff; cursor: pointer; color: #111827; font-weight: 600;">
+                <option value="road">로드 (Road)</option>
+                <option value="trail">트레일 (Trail)</option>
+            </select>
+        </div>
     </div>
 </div>
 
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    // =======================================================
+    // iframe 주소의 파라미터에서 GPX URL을 가져옵니다.
+    // 예: https://본인주소.github.io/gpx/index.html?url=깃허브Raw주소
+    // =======================================================
+    const urlParams = new URLSearchParams(window.location.search);
+    const GPX_URL = urlParams.get('url');
+
+    let globalRawPoints = [];
+    let gpxChartInstance = null;
+    let mapInstance = null;
+    let hoverMarkerInstance = null;
+
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371; // 지구 반경 (km)
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+    }
+
+    function updateCourseType() {
+        const type = document.getElementById('course-type-select').value;
+        processAndRender(type);
+    }
+
+    function processAndRender(courseType) {
+        let SMOOTHING_WINDOW, ELEVATION_THRESHOLD;
+        if (courseType === 'trail') {
+            SMOOTHING_WINDOW = 3; // 트레일은 산악 지형이라 세세한 언덕도 캐치 (스무딩 약하게)
+            ELEVATION_THRESHOLD = 1; // 1m 변화도 누적 (민감하게)
+        } else {
+            SMOOTHING_WINDOW = 15; // 로드는 평지가 많아 GPS 오차(노이즈) 제거 강하게
+            ELEVATION_THRESHOLD = 2; // 2m 이상 변화 시에만 누적
+        }
+
+        // 1. 고도 데이터 스무딩
+        const smoothedPoints = [];
+        for (let i = 0; i < globalRawPoints.length; i++) {
+            let sum = 0;
+            let count = 0;
+            const start = Math.max(0, i - SMOOTHING_WINDOW);
+            const end = Math.min(globalRawPoints.length - 1, i + SMOOTHING_WINDOW);
+            for (let j = start; j <= end; j++) {
+                sum += globalRawPoints[j].ele;
+                count++;
+            }
+            smoothedPoints.push({
+                lat: globalRawPoints[i].lat,
+                lon: globalRawPoints[i].lon,
+                ele: sum / count
+            });
+        }
+
+        // 2. 거리 및 누적 고도 계산
+        const path = [];
+        const chartData = [];
+        let totalDistance = 0;
+        let totalElevationGain = 0;
+        let maxElevation = -Infinity;
+        let minElevation = Infinity;
+        
+        let lastValidEle = null;
+
+        for (let i = 0; i < smoothedPoints.length; i++) {
+            const pt = smoothedPoints[i];
+            const lat = pt.lat;
+            const lon = pt.lon;
+            const ele = pt.ele;
+            
+            if (i === 0) {
+                lastValidEle = ele;
+            } else {
+                const prevPt = smoothedPoints[i-1];
+                totalDistance += calculateDistance(prevPt.lat, prevPt.lon, lat, lon);
+                
+                if (lastValidEle !== null) {
+                    const eleDiff = ele - lastValidEle;
+                    if (eleDiff > ELEVATION_THRESHOLD) {
+                        totalElevationGain += eleDiff;
+                        lastValidEle = ele;
+                    } else if (eleDiff < -ELEVATION_THRESHOLD) {
+                        lastValidEle = ele; // 하강 시 기준점 갱신
+                    }
+                }
+            }
+            
+            if (ele > maxElevation) maxElevation = ele;
+            if (ele < minElevation) minElevation = ele;
+            
+            path.push([lat, lon]);
+            chartData.push({
+                x: totalDistance.toFixed(2),
+                y: ele.toFixed(1),
+                lat: lat,
+                lon: lon
+            });
+        }
+
+        // 3. 요약 정보 업데이트
+        document.getElementById('summary-distance').innerText = totalDistance.toFixed(2) + ' km';
+        document.getElementById('summary-ele-gain').innerText = Math.round(totalElevationGain) + ' m';
+        if (minElevation === Infinity) minElevation = 0;
+        if (maxElevation === -Infinity) maxElevation = 0;
+        document.getElementById('summary-ele-maxmin').innerText = Math.round(maxElevation) + ' m / ' + Math.round(minElevation) + ' m';
+
+        // 4. 차트 업데이트 또는 생성
+        const ctx = document.getElementById('gpx-elevation-chart').getContext('2d');
+        const labels = chartData.map(d => d.x);
+        const dataPts = chartData.map(d => d.y);
+
+        if (gpxChartInstance) {
+            gpxChartInstance.data.labels = labels;
+            gpxChartInstance.data.datasets[0].data = dataPts;
+            gpxChartInstance.update();
+        } else {
+            gpxChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '고도 (m)',
+                        data: dataPts,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                        borderWidth: 2,
+                        fill: true,
+                        pointRadius: 0,
+                        pointHoverRadius: 6,
+                        pointHoverBackgroundColor: '#3b82f6',
+                        pointHoverBorderColor: '#ffffff',
+                        pointHoverBorderWidth: 2,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                            titleFont: { size: 13, family: 'Inter' },
+                            bodyFont: { size: 14, family: 'Inter', weight: 'bold' },
+                            padding: 12,
+                            cornerRadius: 8,
+                            displayColors: false,
+                            callbacks: {
+                                title: function(context) { return '거리: ' + context[0].label + ' km'; },
+                                label: function(context) { return '고도: ' + context.raw + ' m'; }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { display: true, title: { display: true, text: '거리 (km)', font: { family: 'Inter' } }, ticks: { maxTicksLimit: 10, font: { family: 'Inter' } }, grid: { display: false } },
+                        y: { display: true, title: { display: true, text: '고도 (m)', font: { family: 'Inter' } }, ticks: { font: { family: 'Inter' } }, grid: { color: '#f3f4f6' } }
+                    },
+                    onHover: (e, activeElements) => {
+                        if (activeElements.length > 0) {
+                            const index = activeElements[0].index;
+                            const point = chartData[index];
+                            if (mapInstance && hoverMarkerInstance) {
+                                if (!mapInstance.hasLayer(hoverMarkerInstance)) hoverMarkerInstance.addTo(mapInstance);
+                                hoverMarkerInstance.setLatLng([point.lat, point.lon]);
+                            }
+                        } else {
+                            if (mapInstance && hoverMarkerInstance && mapInstance.hasLayer(hoverMarkerInstance)) {
+                                mapInstance.removeLayer(hoverMarkerInstance);
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 5. 맵 그리기 (최초 1회만)
+        if (!mapInstance) {
+            document.getElementById('gpx-loading').style.display = 'none';
+            document.getElementById('gpx-map').style.display = 'block';
+            document.getElementById('gpx-chart-container').style.display = 'block';
+            document.getElementById('gpx-summary').style.display = 'flex';
+
+            mapInstance = L.map('gpx-map', { scrollWheelZoom: false });
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(mapInstance);
+
+            const polyline = L.polyline(path, { color: '#ef4444', weight: 5, opacity: 0.8, lineJoin: 'round' }).addTo(mapInstance);
+            mapInstance.fitBounds(polyline.getBounds());
+
+            hoverMarkerInstance = L.circleMarker([0,0], { radius: 7, fillColor: '#3b82f6', color: '#ffffff', weight: 2, opacity: 1, fillOpacity: 1 });
+        }
+    }
+
+    async function initGpxViewer() {
+        try {
+            if(!GPX_URL) {
+                 document.getElementById('gpx-loading').innerHTML = 'GPX URL이 제공되지 않았습니다.<br>iframe 주소 뒤에 <code>?url=깃허브Raw주소</code>를 추가해주세요.';
+                 return;
+            }
+
+            const response = await fetch(GPX_URL);
+            if (!response.ok) throw new Error('네트워크 응답이 정상이 아닙니다.');
+            const gpxText = await response.text();
+            
+            const parser = new DOMParser();
+            const gpxDom = parser.parseFromString(gpxText, "text/xml");
+            
+            const trkpts = gpxDom.getElementsByTagName('trkpt');
+            if (trkpts.length === 0) {
+                document.getElementById('gpx-loading').innerText = '유효한 GPX 경로(trkpt) 데이터가 없습니다.';
+                return;
+            }
+
+            for (let i = 0; i < trkpts.length; i++) {
+                const pt = trkpts[i];
+                const lat = parseFloat(pt.getAttribute('lat'));
+                const lon = parseFloat(pt.getAttribute('lon'));
+                const eleNode = pt.getElementsByTagName('ele')[0];
+                const ele = eleNode ? parseFloat(eleNode.textContent) : 0;
+                globalRawPoints.push({ lat, lon, ele });
+            }
+
+            // 초기 렌더링 (기본값: 로드)
+            processAndRender('road');
+
+        } catch (error) {
+            console.error('GPX 로딩 에러:', error);
+            document.getElementById('gpx-loading').innerText = '데이터를 불러오는 데 실패했습니다. URL을 확인해주세요.';
+        }
+    }
+
+    // 렌더링 시작
+    initGpxViewer();
+</script>
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
