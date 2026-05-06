@@ -130,6 +130,37 @@
                 return;
             }
 
+            // 1. 원본 데이터 추출
+            const rawPoints = [];
+            for (let i = 0; i < trkpts.length; i++) {
+                const pt = trkpts[i];
+                const lat = parseFloat(pt.getAttribute('lat'));
+                const lon = parseFloat(pt.getAttribute('lon'));
+                const eleNode = pt.getElementsByTagName('ele')[0];
+                const ele = eleNode ? parseFloat(eleNode.textContent) : 0;
+                rawPoints.push({ lat, lon, ele });
+            }
+
+            // 2. 고도 데이터 스무딩 (Moving Average) - GPS 노이즈의 근본적 제거
+            const SMOOTHING_WINDOW = 15; // 앞뒤 15개 포인트 평균
+            const smoothedPoints = [];
+            for (let i = 0; i < rawPoints.length; i++) {
+                let sum = 0;
+                let count = 0;
+                const start = Math.max(0, i - SMOOTHING_WINDOW);
+                const end = Math.min(rawPoints.length - 1, i + SMOOTHING_WINDOW);
+                for (let j = start; j <= end; j++) {
+                    sum += rawPoints[j].ele;
+                    count++;
+                }
+                smoothedPoints.push({
+                    lat: rawPoints[i].lat,
+                    lon: rawPoints[i].lon,
+                    ele: sum / count
+                });
+            }
+
+            // 3. 거리 및 누적 고도 계산
             const path = [];
             const chartData = [];
             let totalDistance = 0;
@@ -138,23 +169,19 @@
             let minElevation = Infinity;
             
             let lastValidEle = null;
-            const ELEVATION_THRESHOLD = 3; // 3m 이상의 변화만 누적 (GPS 노이즈 필터링)
+            const ELEVATION_THRESHOLD = 2; // 스무딩 후에도 2m 이상 변화 시에만 누적
 
-            // 데이터 추출
-            for (let i = 0; i < trkpts.length; i++) {
-                const pt = trkpts[i];
-                const lat = parseFloat(pt.getAttribute('lat'));
-                const lon = parseFloat(pt.getAttribute('lon'));
-                const eleNode = pt.getElementsByTagName('ele')[0];
-                const ele = eleNode ? parseFloat(eleNode.textContent) : 0;
+            for (let i = 0; i < smoothedPoints.length; i++) {
+                const pt = smoothedPoints[i];
+                const lat = pt.lat;
+                const lon = pt.lon;
+                const ele = pt.ele;
                 
                 if (i === 0) {
                     lastValidEle = ele;
                 } else {
-                    const prevPt = trkpts[i-1];
-                    const pLat = parseFloat(prevPt.getAttribute('lat'));
-                    const pLon = parseFloat(prevPt.getAttribute('lon'));
-                    totalDistance += calculateDistance(pLat, pLon, lat, lon);
+                    const prevPt = smoothedPoints[i-1];
+                    totalDistance += calculateDistance(prevPt.lat, prevPt.lon, lat, lon);
                     
                     if (lastValidEle !== null) {
                         const eleDiff = ele - lastValidEle;
