@@ -137,6 +137,9 @@
             let maxElevation = -Infinity;
             let minElevation = Infinity;
             
+            let lastValidEle = null;
+            const ELEVATION_THRESHOLD = 3; // 3m 이상의 변화만 누적 (GPS 노이즈 필터링)
+
             // 데이터 추출
             for (let i = 0; i < trkpts.length; i++) {
                 const pt = trkpts[i];
@@ -145,16 +148,22 @@
                 const eleNode = pt.getElementsByTagName('ele')[0];
                 const ele = eleNode ? parseFloat(eleNode.textContent) : 0;
                 
-                if (i > 0) {
+                if (i === 0) {
+                    lastValidEle = ele;
+                } else {
                     const prevPt = trkpts[i-1];
                     const pLat = parseFloat(prevPt.getAttribute('lat'));
                     const pLon = parseFloat(prevPt.getAttribute('lon'));
                     totalDistance += calculateDistance(pLat, pLon, lat, lon);
                     
-                    const prevEleNode = prevPt.getElementsByTagName('ele')[0];
-                    const prevEle = prevEleNode ? parseFloat(prevEleNode.textContent) : 0;
-                    if (ele > prevEle) {
-                        totalElevationGain += (ele - prevEle);
+                    if (lastValidEle !== null) {
+                        const eleDiff = ele - lastValidEle;
+                        if (eleDiff > ELEVATION_THRESHOLD) {
+                            totalElevationGain += eleDiff;
+                            lastValidEle = ele;
+                        } else if (eleDiff < -ELEVATION_THRESHOLD) {
+                            lastValidEle = ele;
+                        }
                     }
                 }
                 
