@@ -7,7 +7,6 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        /* 블로그 본문에 자연스럽게 녹아들도록 스타일 최적화 */
         .gpx-viewer-wrapper {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             width: 100%;
@@ -39,7 +38,6 @@
             color: #6b7280;
             background: #f9fafb;
         }
-        /* 지도 스크롤 방지 (티스토리/블로그스팟 최적화) */
         .leaflet-container {
             cursor: crosshair;
         }
@@ -79,13 +77,6 @@
         <div class="summary-item"><span class="summary-label">총 거리</span><span class="summary-value" id="summary-distance">-</span></div>
         <div class="summary-item"><span class="summary-label">누적 상승고도</span><span class="summary-value" id="summary-ele-gain">-</span></div>
         <div class="summary-item"><span class="summary-label">최고 / 최저 고도</span><span class="summary-value" id="summary-ele-maxmin">-</span></div>
-        <div class="summary-item">
-            <span class="summary-label">코스 유형</span>
-            <select id="course-type-select" onchange="updateCourseType()" style="font-size: 14px; padding: 2px 6px; border: 1px solid #d1d5db; border-radius: 6px; outline: none; background: #fff; cursor: pointer; color: #111827; font-weight: 600;">
-                <option value="road">로드 (Road)</option>
-                <option value="trail">트레일 (Trail)</option>
-            </select>
-        </div>
     </div>
 </div>
 
@@ -95,10 +86,6 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
-    // =======================================================
-    // iframe 주소의 파라미터에서 GPX URL을 가져옵니다.
-    // 예: https://본인주소.github.io/gpx/index.html?url=깃허브Raw주소
-    // =======================================================
     const urlParams = new URLSearchParams(window.location.search);
     const GPX_URL = urlParams.get('url');
 
@@ -118,20 +105,10 @@
         return R * c;
     }
 
-    function updateCourseType() {
-        const type = document.getElementById('course-type-select').value;
-        processAndRender(type);
-    }
-
-    function processAndRender(courseType) {
-        let SMOOTHING_WINDOW, ELEVATION_THRESHOLD;
-        if (courseType === 'trail') {
-            SMOOTHING_WINDOW = 3; // 트레일은 산악 지형이라 세세한 언덕도 캐치 (스무딩 약하게)
-            ELEVATION_THRESHOLD = 1; // 1m 변화도 누적 (민감하게)
-        } else {
-            SMOOTHING_WINDOW = 15; // 로드는 평지가 많아 GPS 오차(노이즈) 제거 강하게
-            ELEVATION_THRESHOLD = 2; // 2m 이상 변화 시에만 누적
-        }
+    function processAndRender() {
+        // COROS 기기의 획득고도 알고리즘과 유사하게 맞추기 위한 파라미터 최적화 결과
+        const SMOOTHING_WINDOW = 2; // 스무딩 윈도우 크기 2 (약하게 스무딩)
+        const ELEVATION_THRESHOLD = 0.2; // 고도 변화 임계값 0.2m (민감하게 누적)
 
         // 1. 고도 데이터 스무딩
         const smoothedPoints = [];
@@ -273,7 +250,7 @@
             });
         }
         
-        // 5. 맵 그리기 (최초 1회만)
+        // 5. 맵 그리기
         if (!mapInstance) {
             document.getElementById('gpx-loading').style.display = 'none';
             document.getElementById('gpx-map').style.display = 'block';
@@ -319,8 +296,7 @@
                 globalRawPoints.push({ lat, lon, ele });
             }
 
-            // 초기 렌더링 (기본값: 로드)
-            processAndRender('road');
+            processAndRender();
 
         } catch (error) {
             console.error('GPX 로딩 에러:', error);
@@ -328,259 +304,6 @@
         }
     }
 
-    // 렌더링 시작
-    initGpxViewer();
-</script>
-<!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-<script>
-    // =======================================================
-    // iframe 주소의 파라미터에서 GPX URL을 가져옵니다.
-    // 예: https://본인주소.github.io/gpx/index.html?url=깃허브Raw주소
-    // =======================================================
-    const urlParams = new URLSearchParams(window.location.search);
-    const GPX_URL = urlParams.get('url');
-
-    // Haversine 공식을 사용한 두 위경도 좌표 간 거리 계산 (km)
-    function calculateDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371; // 지구 반경 (km)
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                  Math.sin(dLon/2) * Math.sin(dLon/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        return R * c;
-    }
-
-    async function initGpxViewer() {
-        try {
-            // 초기 더미 URL 방어
-            if(!GPX_URL) {
-                 document.getElementById('gpx-loading').innerHTML = 'GPX URL이 제공되지 않았습니다.<br>iframe 주소 뒤에 <code>?url=깃허브Raw주소</code>를 추가해주세요.';
-                 return;
-            }
-
-            // GPX 파일 패치
-            const response = await fetch(GPX_URL);
-            if (!response.ok) throw new Error('네트워크 응답이 정상이 아닙니다.');
-            const gpxText = await response.text();
-            
-            // XML 파싱
-            const parser = new DOMParser();
-            const gpxDom = parser.parseFromString(gpxText, "text/xml");
-            
-            const trkpts = gpxDom.getElementsByTagName('trkpt');
-            if (trkpts.length === 0) {
-                document.getElementById('gpx-loading').innerText = '유효한 GPX 경로(trkpt) 데이터가 없습니다.';
-                return;
-            }
-
-            // 1. 원본 데이터 추출
-            const rawPoints = [];
-            for (let i = 0; i < trkpts.length; i++) {
-                const pt = trkpts[i];
-                const lat = parseFloat(pt.getAttribute('lat'));
-                const lon = parseFloat(pt.getAttribute('lon'));
-                const eleNode = pt.getElementsByTagName('ele')[0];
-                const ele = eleNode ? parseFloat(eleNode.textContent) : 0;
-                rawPoints.push({ lat, lon, ele });
-            }
-
-            // 2. 고도 데이터 스무딩 (Moving Average) - GPS 노이즈의 근본적 제거
-            const SMOOTHING_WINDOW = 15; // 앞뒤 15개 포인트 평균
-            const smoothedPoints = [];
-            for (let i = 0; i < rawPoints.length; i++) {
-                let sum = 0;
-                let count = 0;
-                const start = Math.max(0, i - SMOOTHING_WINDOW);
-                const end = Math.min(rawPoints.length - 1, i + SMOOTHING_WINDOW);
-                for (let j = start; j <= end; j++) {
-                    sum += rawPoints[j].ele;
-                    count++;
-                }
-                smoothedPoints.push({
-                    lat: rawPoints[i].lat,
-                    lon: rawPoints[i].lon,
-                    ele: sum / count
-                });
-            }
-
-            // 3. 거리 및 누적 고도 계산
-            const path = [];
-            const chartData = [];
-            let totalDistance = 0;
-            let totalElevationGain = 0;
-            let maxElevation = -Infinity;
-            let minElevation = Infinity;
-            
-            let lastValidEle = null;
-            const ELEVATION_THRESHOLD = 2; // 스무딩 후에도 2m 이상 변화 시에만 누적
-
-            for (let i = 0; i < smoothedPoints.length; i++) {
-                const pt = smoothedPoints[i];
-                const lat = pt.lat;
-                const lon = pt.lon;
-                const ele = pt.ele;
-                
-                if (i === 0) {
-                    lastValidEle = ele;
-                } else {
-                    const prevPt = smoothedPoints[i-1];
-                    totalDistance += calculateDistance(prevPt.lat, prevPt.lon, lat, lon);
-                    
-                    if (lastValidEle !== null) {
-                        const eleDiff = ele - lastValidEle;
-                        if (eleDiff > ELEVATION_THRESHOLD) {
-                            totalElevationGain += eleDiff;
-                            lastValidEle = ele;
-                        } else if (eleDiff < -ELEVATION_THRESHOLD) {
-                            lastValidEle = ele;
-                        }
-                    }
-                }
-                
-                if (ele > maxElevation) maxElevation = ele;
-                if (ele < minElevation) minElevation = ele;
-                
-                path.push([lat, lon]);
-                chartData.push({
-                    x: totalDistance.toFixed(2), // 누적 거리 (km)
-                    y: ele.toFixed(1), // 고도 (m)
-                    lat: lat,
-                    lon: lon
-                });
-            }
-
-            // 로딩 숨기고 지도 및 차트 표시
-            document.getElementById('gpx-loading').style.display = 'none';
-            document.getElementById('gpx-map').style.display = 'block';
-            document.getElementById('gpx-chart-container').style.display = 'block';
-            document.getElementById('gpx-summary').style.display = 'flex';
-            
-            // 요약 정보 업데이트
-            document.getElementById('summary-distance').innerText = totalDistance.toFixed(2) + ' km';
-            document.getElementById('summary-ele-gain').innerText = Math.round(totalElevationGain) + ' m';
-            if (minElevation === Infinity) minElevation = 0;
-            if (maxElevation === -Infinity) maxElevation = 0;
-            document.getElementById('summary-ele-maxmin').innerText = Math.round(maxElevation) + ' m / ' + Math.round(minElevation) + ' m';
-
-            // 지도 초기화
-            const map = L.map('gpx-map', {
-                scrollWheelZoom: false // 티스토리 스크롤 방해 방지를 위해 휠 줌 비활성화
-            });
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap contributors'
-            }).addTo(map);
-
-            // 경로 그리기
-            const polyline = L.polyline(path, {
-                color: '#ef4444', 
-                weight: 5, 
-                opacity: 0.8,
-                lineJoin: 'round'
-            }).addTo(map);
-            map.fitBounds(polyline.getBounds());
-
-            // 마우스 호버 동기화용 마커 (기본은 투명/숨김)
-            const hoverMarker = L.circleMarker([0,0], {
-                radius: 7,
-                fillColor: '#3b82f6',
-                color: '#ffffff',
-                weight: 2,
-                opacity: 1,
-                fillOpacity: 1
-            });
-
-            // 차트 초기화
-            const ctx = document.getElementById('gpx-elevation-chart').getContext('2d');
-            const labels = chartData.map(d => d.x);
-            const dataPts = chartData.map(d => d.y);
-
-            new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: '고도 (m)',
-                        data: dataPts,
-                        borderColor: '#3b82f6',
-                        backgroundColor: 'rgba(59, 130, 246, 0.15)',
-                        borderWidth: 2,
-                        fill: true,
-                        pointRadius: 0,
-                        pointHoverRadius: 6,
-                        pointHoverBackgroundColor: '#3b82f6',
-                        pointHoverBorderColor: '#ffffff',
-                        pointHoverBorderWidth: 2,
-                        tension: 0.4 // 부드러운 곡선
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: {
-                        mode: 'index',
-                        intersect: false,
-                    },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            backgroundColor: 'rgba(17, 24, 39, 0.9)',
-                            titleFont: { size: 13, family: 'Inter' },
-                            bodyFont: { size: 14, family: 'Inter', weight: 'bold' },
-                            padding: 12,
-                            cornerRadius: 8,
-                            displayColors: false,
-                            callbacks: {
-                                title: function(context) {
-                                    return '거리: ' + context[0].label + ' km';
-                                },
-                                label: function(context) {
-                                    return '고도: ' + context.raw + ' m';
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            display: true,
-                            title: { display: true, text: '거리 (km)', font: { family: 'Inter' } },
-                            ticks: { maxTicksLimit: 10, font: { family: 'Inter' } },
-                            grid: { display: false }
-                        },
-                        y: {
-                            display: true,
-                            title: { display: true, text: '고도 (m)', font: { family: 'Inter' } },
-                            ticks: { font: { family: 'Inter' } },
-                            grid: { color: '#f3f4f6' }
-                        }
-                    },
-                    onHover: (e, activeElements) => {
-                        if (activeElements.length > 0) {
-                            const index = activeElements[0].index;
-                            const point = chartData[index];
-                            if (!map.hasLayer(hoverMarker)) {
-                                hoverMarker.addTo(map);
-                            }
-                            hoverMarker.setLatLng([point.lat, point.lon]);
-                        } else {
-                            if (map.hasLayer(hoverMarker)) {
-                                map.removeLayer(hoverMarker);
-                            }
-                        }
-                    }
-                }
-            });
-
-        } catch (error) {
-            console.error('GPX 로딩 에러:', error);
-            document.getElementById('gpx-loading').innerText = '데이터를 불러오는 데 실패했습니다. URL을 확인해주세요.';
-        }
-    }
-
-    // 렌더링 시작
     initGpxViewer();
 </script>
 </body>
