@@ -618,7 +618,7 @@
             
             if (waypoints.length > 0) {
                 allCoords.push(waypoints[0]);
-                let startEle = (elevationSegments.length > 0 && elevationSegments[0] && elevationSegments[0][0] !== null) ? elevationSegments[0][0] : 0;
+                let startEle = (elevationSegments.length > 0 && elevationSegments[0] && elevationSegments[0][0] !== null && elevationSegments[0][0] !== 0) ? elevationSegments[0][0] : null;
                 allEles.push(startEle);
                 
                 for (let i = 0; i < routeSegments.length; i++) {
@@ -634,7 +634,7 @@
                         }
                         for (let j = startIdx; j < segment.length; j++) {
                             allCoords.push(segment[j]);
-                            let ele = (eles && eles[j] !== undefined && eles[j] !== null) ? eles[j] : allEles[allEles.length - 1];
+                            let ele = (eles && eles[j] !== undefined && eles[j] !== null && eles[j] !== 0) ? eles[j] : null;
                             allEles.push(ele);
                         }
                     }
@@ -653,9 +653,14 @@
 
         function calculateElevationGain(elevations) {
             let gain = 0;
-            for (let i = 1; i < elevations.length; i++) {
-                const diff = elevations[i] - elevations[i-1];
-                if (diff > 0) gain += diff;
+            let lastEle = null;
+            for (let i = 0; i < elevations.length; i++) {
+                if (elevations[i] === null || elevations[i] === 0) continue;
+                if (lastEle !== null) {
+                    const diff = elevations[i] - lastEle;
+                    if (diff > 0) gain += diff;
+                }
+                lastEle = elevations[i];
             }
             return gain;
         }
@@ -687,7 +692,8 @@
                         borderWidth: 2,
                         pointRadius: 0,
                         fill: true,
-                        tension: 0.1
+                        tension: 0.1,
+                        spanGaps: true
                     }]
                 },
                 options: {
@@ -857,7 +863,14 @@
                 if (!segment) segment = [lastPoint, newPoint];
                 routeSegments[routeSegIdx] = segment; 
                 
-                if (segmentEles) {
+                // Ensure elevation placeholder length matches the potentially new segment length
+                if (elevationSegments[eleSegIdx].length !== segment.length) {
+                    const currentFillEle = (elevationSegments[eleSegIdx] && elevationSegments[eleSegIdx].length > 0) ? elevationSegments[eleSegIdx][0] : null;
+                    elevationSegments[eleSegIdx] = new Array(segment.length).fill(currentFillEle);
+                }
+
+                // Only use BRouter elevations if they aren't all zeros
+                if (segmentEles && segmentEles.some(e => e !== 0 && e !== null)) {
                     elevationSegments[eleSegIdx] = segmentEles;
                     updateUI();
                 } else {
