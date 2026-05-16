@@ -618,11 +618,12 @@
             
             if (waypoints.length > 0) {
                 allCoords.push(waypoints[0]);
-                allEles.push(elevationSegments.length > 0 && elevationSegments[0] ? elevationSegments[0][0] || 0 : 0);
+                let startEle = (elevationSegments.length > 0 && elevationSegments[0] && elevationSegments[0][0] !== null) ? elevationSegments[0][0] : 0;
+                allEles.push(startEle);
                 
                 for (let i = 0; i < routeSegments.length; i++) {
                     const segment = routeSegments[i];
-                    const eles = elevationSegments[i + 1] || new Array(segment.length).fill(0);
+                    const eles = elevationSegments[i + 1];
                     
                     if (segment.length > 0) {
                         let startIdx = 0;
@@ -633,7 +634,7 @@
                         }
                         for (let j = startIdx; j < segment.length; j++) {
                             allCoords.push(segment[j]);
-                            const ele = (eles && eles[j] !== undefined) ? eles[j] : 0;
+                            let ele = (eles && eles[j] !== undefined && eles[j] !== null) ? eles[j] : allEles[allEles.length - 1];
                             allEles.push(ele);
                         }
                     }
@@ -817,7 +818,7 @@
             
             if (waypoints.length === 0) {
                 waypoints.push(newPoint);
-                elevationSegments.push([0]); 
+                elevationSegments.push([null]); 
                 updateUI();
                 
                 activeElevationRequests++;
@@ -836,8 +837,8 @@
                 routeSegments.push([lastPoint, newPoint]); 
                 
                 const lastEleSegment = elevationSegments[elevationSegments.length - 1];
-                const lastEle = lastEleSegment[lastEleSegment.length - 1];
-                elevationSegments.push([lastEle, lastEle]); 
+                const lastEle = (lastEleSegment && lastEleSegment.length > 0) ? lastEleSegment[lastEleSegment.length - 1] : null;
+                elevationSegments.push(new Array(2).fill(lastEle)); 
                 updateUI();
                 
                 let segment = null;
