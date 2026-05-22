@@ -107,9 +107,38 @@
     }
 
     function processAndRender() {
-        // COROS 기기의 획득고도 알고리즘과 유사하게 맞추기 위한 파라미터 최적화 결과
-        const SMOOTHING_WINDOW = 2; // 스무딩 윈도우 크기 2 (약하게 스무딩)
-        const ELEVATION_THRESHOLD = 0.2; // 고도 변화 임계값 0.2m (민감하게 누적)
+        // 0. GPX 파일의 데이터 밀도(포인트 간 평균 거리) 계산
+        let tempDistance = 0;
+        for (let i = 1; i < globalRawPoints.length; i++) {
+            tempDistance += calculateDistance(globalRawPoints[i-1].lat, globalRawPoints[i-1].lon, globalRawPoints[i].lat, globalRawPoints[i].lon);
+        }
+        const numPoints = globalRawPoints.length;
+        const avgSpacing = numPoints > 1 ? (tempDistance * 1000) / (numPoints - 1) : 0; // 단위: 미터
+
+        // 데이터 밀도(포인트 평균 간격)에 따라 스무딩 윈도우와 누적 임계값을 동적으로 결정하여 고도를 보정합니다.
+        let SMOOTHING_WINDOW = 2; // 기본값
+        let ELEVATION_THRESHOLD = 0.2; // 기본값
+
+        if (avgSpacing >= 55) {
+            // 포인트 간격이 55m 이상으로 극도로 넓은 경우 (예: go_daegwan 21k, 44k)
+            SMOOTHING_WINDOW = 1;      // 스무딩을 최소화하여 업힐 유실 방지
+            ELEVATION_THRESHOLD = 0.2;
+        } else if (avgSpacing >= 40) {
+            // 포인트 간격이 40m 이상으로 넓은 경우 (예: go_daegwan 10k)
+            SMOOTHING_WINDOW = 0;      // 스무딩 미적용 (원시 데이터 그대로 사용)
+            ELEVATION_THRESHOLD = 0.2;
+        } else if (avgSpacing >= 15) {
+            // 중간 밀도
+            SMOOTHING_WINDOW = 1;
+            ELEVATION_THRESHOLD = 0.2;
+        } else {
+            // 고밀도 스마트워치 기록 (포인트가 촘촘함: 약 15m 미만)
+            SMOOTHING_WINDOW = 2;      // GPS 튐 노이즈를 제거하기 위해 기본 스무딩 적용
+            ELEVATION_THRESHOLD = 0.2;
+        }
+
+        console.log(`[GPX 분석] 총 포인트: ${numPoints}개, 평균 포인트 간격: ${avgSpacing.toFixed(1)}m`);
+        console.log(`[동적 보정] SMOOTHING_WINDOW = ${SMOOTHING_WINDOW}, ELEVATION_THRESHOLD = ${ELEVATION_THRESHOLD}`);
 
         // 1. 고도 데이터 스무딩
         const smoothedPoints = [];
