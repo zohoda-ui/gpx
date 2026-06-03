@@ -77,6 +77,7 @@
         <div class="summary-item"><span class="summary-label">총 거리</span><span class="summary-value" id="summary-distance">-</span></div>
         <div class="summary-item"><span class="summary-label">누적 상승고도</span><span class="summary-value" id="summary-ele-gain">-</span></div>
         <div class="summary-item"><span class="summary-label">최고 / 최저 고도</span><span class="summary-value" id="summary-ele-maxmin">-</span></div>
+        <div class="summary-item"><span class="summary-label">v/km</span><span class="summary-value" id="summary-vkm">-</span></div>
     </div>
 </div>
 
@@ -209,6 +210,9 @@
         if (minElevation === Infinity) minElevation = 0;
         if (maxElevation === -Infinity) maxElevation = 0;
         document.getElementById('summary-ele-maxmin').innerText = Math.round(maxElevation) + ' m / ' + Math.round(minElevation) + ' m';
+
+        const vkm = totalDistance > 0 ? (totalElevationGain / totalDistance).toFixed(1) : 0;
+        document.getElementById('summary-vkm').innerText = vkm;
 
         // 4. 차트 업데이트 또는 생성 (linear 스케일용 {x, y} 포인트 배열)
         const ctx = document.getElementById('gpx-elevation-chart').getContext('2d');
