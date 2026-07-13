@@ -325,7 +325,12 @@
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(mapInstance);
 
             const polyline = L.polyline(path, { color: '#ef4444', weight: 5, opacity: 0.8, lineJoin: 'round' }).addTo(mapInstance);
-            mapInstance.fitBounds(polyline.getBounds());
+            
+            // Fix Leaflet sizing bug in dynamically visible containers
+            setTimeout(() => {
+                mapInstance.invalidateSize();
+                mapInstance.fitBounds(polyline.getBounds());
+            }, 200);
 
             hoverMarkerInstance = L.circleMarker([0,0], { radius: 7, fillColor: '#3b82f6', color: '#ffffff', weight: 2, opacity: 1, fillOpacity: 1 });
 
