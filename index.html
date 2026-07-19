@@ -103,6 +103,27 @@
         .summary-value.highlight-orange {
             color: #f97316;
         }
+        @media (max-width: 600px) {
+            .gpx-summary {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 12px 0;
+                padding: 16px 8px;
+            }
+            .summary-item {
+                border-right: none !important;
+            }
+            .summary-item:nth-child(odd) {
+                border-right: 1px solid var(--border-color) !important;
+            }
+            .summary-value {
+                font-size: 15px;
+            }
+            .summary-label {
+                font-size: 10px;
+                margin-bottom: 4px;
+            }
+        }
     </style>
 </head>
 <body>
