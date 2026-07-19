@@ -11,6 +11,11 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #ffffff !important;
+        }
         :root {
             --primary-color: #10b981;
             --primary-hover: #059669;
@@ -22,39 +27,6 @@
             --border-color: #e5e7eb;
             --card-bg: #ffffff;
             --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-        }
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --bg-color: #0b0f19;
-                --muted-bg: #111827;
-                --text-color: #f3f4f6;
-                --muted-text: #9ca3af;
-                --border-color: #1f2937;
-                --card-bg: #111827;
-                --card-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
-                --primary-light: rgba(16, 185, 129, 0.15);
-            }
-            .leaflet-tile-container {
-                filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
-            }
-            .leaflet-container {
-                background: #111827 !important;
-            }
-            .leaflet-bar a {
-                background-color: #1f2937 !important;
-                color: #f3f4f6 !important;
-                border-bottom-color: #374151 !important;
-            }
-            .leaflet-bar a:hover {
-                background-color: #374151 !important;
-            }
-            .leaflet-control-attribution {
-                background: rgba(17, 24, 39, 0.8) !important;
-                color: #9ca3af !important;
-            }
-            .leaflet-control-attribution a {
-                color: #10b981 !important;
-            }
         }
         .gpx-viewer-wrapper {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -302,12 +274,17 @@
             displayChartData = chartData.slice();
         }
 
-        const dataPts = displayChartData.map(d => ({ x: d.x, y: d.y }));
+        const dataPts = displayChartData.map(d => ({ x: parseFloat(d.x), y: parseFloat(d.y) }));
 
-        const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const isDark = false;
         const primaryColor = '#10b981';
-        const textColor = isDark ? '#9ca3af' : '#6b7280';
-        const gridColor = isDark ? '#1f2937' : '#f3f4f6';
+        const textColor = '#6b7280';
+        const gridColor = '#f3f4f6';
+
+        const eleRange = maxElevation - minElevation;
+        const eleBuffer = eleRange > 0 ? eleRange * 0.05 : 10;
+        const yMin = Math.max(0, Math.floor(minElevation - eleBuffer));
+        const yMax = Math.ceil(maxElevation + eleBuffer);
 
         if (gpxChartInstance) {
             gpxChartInstance.data.datasets[0].data = dataPts;
@@ -356,21 +333,22 @@
                         x: {
                             type: 'linear',
                             display: true,
-                            title: { display: true, text: '거리 (km)', color: textColor, font: { family: 'Inter', size: 11, weight: '600' } },
                             ticks: {
                                 maxTicksLimit: 10,
                                 color: textColor,
                                 font: { family: 'Inter', size: 10 },
-                                callback: function(value) { return value.toFixed(1); }
+                                callback: function(value) { return value.toFixed(1) + ' km'; }
                             },
                             grid: { display: false }
                         },
                         y: {
                             display: true,
-                            title: { display: true, text: '고도 (m)', color: textColor, font: { family: 'Inter', size: 11, weight: '600' } },
+                            min: yMin,
+                            max: yMax,
                             ticks: { 
                                 color: textColor,
-                                font: { family: 'Inter', size: 10 } 
+                                font: { family: 'Inter', size: 10 },
+                                callback: function(value) { return value + ' m'; }
                             },
                             grid: { color: gridColor }
                         }
