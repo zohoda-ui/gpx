@@ -39,7 +39,8 @@
             box-shadow: var(--card-shadow);
             background: var(--card-bg);
             transition: all 0.3s ease;
-            height: fit-content;
+            height: auto;
+            max-height: fit-content;
         }
         .gpx-map {
             height: 380px;
@@ -70,13 +71,17 @@
         .gpx-summary {
             display: flex;
             justify-content: space-around;
+            align-items: center;
             padding: 12px 16px;
             margin: 0;
             height: auto;
+            max-height: fit-content;
+            flex: 0 0 auto;
             background: var(--muted-bg);
             border-top: 1px solid var(--border-color);
             font-size: 14px;
             transition: all 0.3s ease;
+            box-sizing: border-box;
         }
         .summary-item {
             text-align: center;
@@ -116,10 +121,15 @@
                 padding: 10px 10px 20px 10px;
             }
             .gpx-summary {
-                display: grid;
+                display: grid !important;
                 grid-template-columns: 1fr 1fr;
                 gap: 8px 0;
                 padding: 12px 8px;
+                height: auto !important;
+                max-height: fit-content;
+                flex: 0 0 auto;
+                align-items: center;
+                box-sizing: border-box;
             }
             .summary-item {
                 border-right: none !important;
