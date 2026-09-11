@@ -51,99 +51,61 @@
             position: relative;
             height: 220px;
             width: 100%;
-            padding: 12px 16px 0px 16px;
+            padding: 16px 20px 8px 20px;
             box-sizing: border-box;
-            background: var(--card-bg);
+            background: var(--bg-color);
             border-top: 1px solid var(--border-color);
-            transition: all 0.3s ease;
         }
-        .gpx-loading {
-            padding: 50px 40px;
-            text-align: center;
-            font-size: 15px;
-            font-weight: 500;
-            color: var(--muted-text);
-            background: var(--card-bg);
+        #gpx-elevation-chart {
+            display: block;
         }
-        .leaflet-container {
-            cursor: crosshair;
+        @media (max-width: 768px) {
+            .gpx-map {
+                height: 260px;
+            }
+            .gpx-chart-container {
+                height: 180px;
+                padding: 12px 14px 4px 14px;
+            }
         }
         .gpx-summary {
             display: flex;
             justify-content: space-around;
-            align-items: center;
-            padding: 12px 16px;
-            margin: 0;
-            height: auto;
-            max-height: fit-content;
-            flex: 0 0 auto;
+            padding: 14px 20px;
             background: var(--muted-bg);
             border-top: 1px solid var(--border-color);
-            font-size: 14px;
-            transition: all 0.3s ease;
-            box-sizing: border-box;
+            flex-wrap: wrap;
+            gap: 12px;
         }
         .summary-item {
             text-align: center;
-            flex: 1;
-            transition: transform 0.2s ease;
-        }
-        .summary-item:not(:last-child) {
-            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
         }
         .summary-label {
-            display: block;
-            color: var(--muted-text);
             font-size: 11px;
-            font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            margin-bottom: 6px;
+            color: var(--muted-text);
+            font-weight: 600;
         }
         .summary-value {
-            color: var(--text-color);
+            font-size: 15px;
             font-weight: 700;
-            font-size: 17px;
-            transition: color 0.3s ease;
+            color: var(--text-color);
         }
         .summary-value.highlight-green {
-            color: var(--primary-color);
+            color: #10b981;
         }
         .summary-value.highlight-orange {
-            color: #f97316;
+            color: #f59e0b;
         }
-        @media (max-width: 600px) {
-            .gpx-map {
-                height: 250px;
-            }
-            .gpx-chart-container {
-                height: 150px;
-                padding: 10px 10px 20px 10px;
-            }
-            .gpx-summary {
-                display: grid !important;
-                grid-template-columns: 1fr 1fr;
-                gap: 8px 0;
-                padding: 12px 8px;
-                height: auto !important;
-                max-height: fit-content;
-                flex: 0 0 auto;
-                align-items: center;
-                box-sizing: border-box;
-            }
-            .summary-item {
-                border-right: none !important;
-            }
-            .summary-item:nth-child(odd) {
-                border-right: 1px solid var(--border-color) !important;
-            }
-            .summary-value {
-                font-size: 14px;
-            }
-            .summary-label {
-                font-size: 9px;
-                margin-bottom: 2px;
-            }
+        .gpx-loading {
+            padding: 40px;
+            text-align: center;
+            color: var(--muted-text);
+            font-size: 14px;
         }
     </style>
 </head>
@@ -167,139 +129,38 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- RunRuun Elevation Engine (Production Standard) -->
+<script src="runruun-elevation.js"></script>
 
 <script>
     const urlParams = new URLSearchParams(window.location.search);
     const GPX_URL = urlParams.get('url');
 
-    let globalRawPoints = [];
     let gpxChartInstance = null;
     let mapInstance = null;
     let hoverMarkerInstance = null;
-    let displayChartData = [];  // onHover에서 접근 가능하도록 상위 스코프
+    let displayChartData = [];
 
-    function calculateDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371; // 지구 반경 (km)
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                  Math.sin(dLon/2) * Math.sin(dLon/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        return R * c;
-    }
+    function renderAnalysis(result, rawPoints) {
+        const stats = result.stats;
+        const chartData = stats.chartData || [];
 
-    function processAndRender() {
-        // 0. GPX 파일의 데이터 밀도(포인트 간 평균 거리) 계산
-        let tempDistance = 0;
-        for (let i = 1; i < globalRawPoints.length; i++) {
-            tempDistance += calculateDistance(globalRawPoints[i-1].lat, globalRawPoints[i-1].lon, globalRawPoints[i].lat, globalRawPoints[i].lon);
-        }
-        const numPoints = globalRawPoints.length;
-        const avgSpacing = numPoints > 1 ? (tempDistance * 1000) / (numPoints - 1) : 0; // 단위: 미터
+        // 1. 요약 정보 업데이트 (RunRuun Production 정규 통계 사용)
+        const totalDist = typeof stats.totalDist === 'number' ? stats.totalDist : (stats.rawTotalDistKm || 0);
+        const eleGain = typeof stats.eleGain === 'number' ? stats.eleGain : 0;
+        const maxEle = typeof stats.maxEle === 'number' ? stats.maxEle : 0;
+        const minEle = typeof stats.minEle === 'number' ? stats.minEle : 0;
+        const vkm = typeof stats.vkm === 'number' ? stats.vkm : 0;
 
-        // 데이터 밀도(포인트 평균 간격)에 따라 스무딩 윈도우와 누적 임계값을 동적으로 결정하여 고도를 보정합니다.
-        let SMOOTHING_WINDOW = 2; // 기본값
-        let ELEVATION_THRESHOLD = 0.2; // 기본값
+        document.getElementById('summary-distance').innerText = totalDist.toFixed(2) + ' km';
+        document.getElementById('summary-ele-gain').innerText = Math.round(eleGain) + ' m';
+        document.getElementById('summary-ele-maxmin').innerText = Math.round(maxEle) + ' m / ' + Math.round(minEle) + ' m';
+        document.getElementById('summary-vkm').innerText = vkm.toFixed(1);
 
-        if (avgSpacing >= 55) {
-            // 포인트 간격이 55m 이상으로 극도로 넓은 경우 (예: go_daegwan 21k, 44k)
-            SMOOTHING_WINDOW = 1;      // 스무딩을 최소화하여 업힐 유실 방지
-            ELEVATION_THRESHOLD = 0.2;
-        } else if (avgSpacing >= 40) {
-            // 포인트 간격이 40m 이상으로 넓은 경우 (예: go_daegwan 10k)
-            SMOOTHING_WINDOW = 0;      // 스무딩 미적용 (원시 데이터 그대로 사용)
-            ELEVATION_THRESHOLD = 0.2;
-        } else if (avgSpacing >= 15) {
-            // 중간 밀도
-            SMOOTHING_WINDOW = 1;
-            ELEVATION_THRESHOLD = 0.2;
-        } else {
-            // 고밀도 스마트워치 기록 (포인트가 촘촘함: 약 15m 미만)
-            SMOOTHING_WINDOW = 2;      // GPS 튐 노이즈를 제거하기 위해 기본 스무딩 적용
-            ELEVATION_THRESHOLD = 0.2;
-        }
+        // 2. 지도 좌표
+        const path = (rawPoints && rawPoints.length > 0 ? rawPoints : (result.points || [])).map(pt => [pt.lat, pt.lon]);
 
-        console.log(`[GPX 분석] 총 포인트: ${numPoints}개, 평균 포인트 간격: ${avgSpacing.toFixed(1)}m`);
-        console.log(`[동적 보정] SMOOTHING_WINDOW = ${SMOOTHING_WINDOW}, ELEVATION_THRESHOLD = ${ELEVATION_THRESHOLD}`);
-
-        // 1. 고도 데이터 스무딩
-        const smoothedPoints = [];
-        for (let i = 0; i < globalRawPoints.length; i++) {
-            let sum = 0;
-            let count = 0;
-            const start = Math.max(0, i - SMOOTHING_WINDOW);
-            const end = Math.min(globalRawPoints.length - 1, i + SMOOTHING_WINDOW);
-            for (let j = start; j <= end; j++) {
-                sum += globalRawPoints[j].ele;
-                count++;
-            }
-            smoothedPoints.push({
-                lat: globalRawPoints[i].lat,
-                lon: globalRawPoints[i].lon,
-                ele: sum / count
-            });
-        }
-
-        // 2. 거리 및 누적 고도 계산
-        const path = [];
-        const chartData = [];
-        let totalDistance = 0;
-        let totalElevationGain = 0;
-        let maxElevation = -Infinity;
-        let minElevation = Infinity;
-        
-        let lastValidEle = null;
-
-        for (let i = 0; i < smoothedPoints.length; i++) {
-            const pt = smoothedPoints[i];
-            const lat = pt.lat;
-            const lon = pt.lon;
-            const ele = pt.ele;
-            
-            if (i === 0) {
-                lastValidEle = ele;
-            } else {
-                const prevPt = smoothedPoints[i-1];
-                totalDistance += calculateDistance(prevPt.lat, prevPt.lon, lat, lon);
-                
-                if (lastValidEle !== null) {
-                    const eleDiff = ele - lastValidEle;
-                    if (eleDiff > ELEVATION_THRESHOLD) {
-                        totalElevationGain += eleDiff;
-                        lastValidEle = ele;
-                    } else if (eleDiff < -ELEVATION_THRESHOLD) {
-                        lastValidEle = ele; // 하강 시 기준점 갱신
-                    }
-                }
-            }
-            
-            if (ele > maxElevation) maxElevation = ele;
-            if (ele < minElevation) minElevation = ele;
-            
-            path.push([lat, lon]);
-            chartData.push({
-                x: totalDistance,
-                y: ele,
-                lat: lat,
-                lon: lon
-            });
-        }
-
-        // 3. 요약 정보 업데이트
-        document.getElementById('summary-distance').innerText = totalDistance.toFixed(2) + ' km';
-        document.getElementById('summary-ele-gain').innerText = Math.round(totalElevationGain) + ' m';
-        if (minElevation === Infinity) minElevation = 0;
-        if (maxElevation === -Infinity) maxElevation = 0;
-        document.getElementById('summary-ele-maxmin').innerText = Math.round(maxElevation) + ' m / ' + Math.round(minElevation) + ' m';
-
-        const vkm = totalDistance > 0 ? (totalElevationGain / totalDistance).toFixed(1) : 0;
-        document.getElementById('summary-vkm').innerText = vkm;
-
-        // 4. 차트 업데이트 또는 생성 (linear 스케일용 {x, y} 포인트 배열)
-        const ctx = document.getElementById('gpx-elevation-chart').getContext('2d');
-
-        // 데이터 포인트가 너무 많으면 다운샘플링 (최대 800개)
+        // 3. 차트 포인트 다운샘플링 (최대 800개)
         const MAX_CHART_POINTS = 800;
         if (chartData.length > MAX_CHART_POINTS) {
             const step = Math.ceil(chartData.length / MAX_CHART_POINTS);
@@ -307,7 +168,6 @@
             for (let i = 0; i < chartData.length; i += step) {
                 displayChartData.push(chartData[i]);
             }
-            // 항상 마지막 포인트 포함
             const lastPt = chartData[chartData.length - 1];
             if (displayChartData[displayChartData.length - 1] !== lastPt) {
                 displayChartData.push(lastPt);
@@ -318,18 +178,21 @@
 
         const dataPts = displayChartData.map(d => ({ x: parseFloat(d.x), y: parseFloat(d.y) }));
 
-        const isDark = false;
         const primaryColor = '#10b981';
         const textColor = '#6b7280';
         const gridColor = '#f3f4f6';
 
-        const eleRange = maxElevation - minElevation;
+        const eleRange = maxEle - minEle;
         const eleBuffer = eleRange > 0 ? eleRange * 0.05 : 10;
-        const yMin = Math.max(0, Math.floor(minElevation - eleBuffer));
-        const yMax = Math.ceil(maxElevation + eleBuffer);
+        const yMin = Math.max(0, Math.floor(minEle - eleBuffer));
+        const yMax = Math.ceil(maxEle + eleBuffer);
+
+        const ctx = document.getElementById('gpx-elevation-chart').getContext('2d');
 
         if (gpxChartInstance) {
             gpxChartInstance.data.datasets[0].data = dataPts;
+            gpxChartInstance.options.scales.y.min = yMin;
+            gpxChartInstance.options.scales.y.max = yMax;
             gpxChartInstance.update();
         } else {
             gpxChartInstance = new Chart(ctx, {
@@ -339,13 +202,13 @@
                         label: '고도 (m)',
                         data: dataPts,
                         borderColor: primaryColor,
-                        backgroundColor: isDark ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.12)',
+                        backgroundColor: 'rgba(16, 185, 129, 0.12)',
                         borderWidth: 2,
                         fill: true,
                         pointRadius: 0,
                         pointHoverRadius: 6,
                         pointHoverBackgroundColor: primaryColor,
-                        pointHoverBorderColor: isDark ? '#111827' : '#ffffff',
+                        pointHoverBorderColor: '#ffffff',
                         pointHoverBorderWidth: 2,
                         tension: 0.4
                     }]
@@ -365,9 +228,9 @@
                     plugins: {
                         legend: { display: false },
                         tooltip: {
-                            backgroundColor: isDark ? 'rgba(31, 41, 55, 0.95)' : 'rgba(17, 24, 39, 0.95)',
-                            titleColor: isDark ? '#f3f4f6' : '#ffffff',
-                            bodyColor: isDark ? '#f3f4f6' : '#ffffff',
+                            backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                            titleColor: '#ffffff',
+                            bodyColor: '#ffffff',
                             titleFont: { size: 12, family: 'Inter', weight: 'normal' },
                             bodyFont: { size: 13, family: 'Inter', weight: 'bold' },
                             padding: 10,
@@ -421,7 +284,7 @@
             });
         }
         
-        // 5. 맵 그리기
+        // 4. 지도 그리기
         if (!mapInstance) {
             document.getElementById('gpx-loading').style.display = 'none';
             document.getElementById('gpx-map').style.display = 'block';
@@ -433,15 +296,13 @@
 
             const polyline = L.polyline(path, { color: primaryColor, weight: 5, opacity: 0.85, lineJoin: 'round' }).addTo(mapInstance);
             
-            // Fix Leaflet sizing bug in dynamically visible containers
             setTimeout(() => {
                 mapInstance.invalidateSize();
                 mapInstance.fitBounds(polyline.getBounds());
             }, 200);
 
-            hoverMarkerInstance = L.circleMarker([0,0], { radius: 6, fillColor: primaryColor, color: isDark ? '#111827' : '#ffffff', weight: 2, opacity: 1, fillOpacity: 1 });
+            hoverMarkerInstance = L.circleMarker([0,0], { radius: 6, fillColor: primaryColor, color: '#ffffff', weight: 2, opacity: 1, fillOpacity: 1 });
 
-            // 모바일 호환: 컨테이너가 visible 된 후 차트 크기 재계산
             if (gpxChartInstance) {
                 setTimeout(() => { gpxChartInstance.resize(); }, 150);
             }
@@ -450,7 +311,7 @@
 
     async function initGpxViewer() {
         try {
-            if(!GPX_URL) {
+            if (!GPX_URL) {
                  document.getElementById('gpx-loading').innerHTML = 'GPX URL이 제공되지 않았습니다.<br>iframe 주소 뒤에 <code>?url=깃허브Raw주소</code>를 추가해주세요.';
                  return;
             }
@@ -458,30 +319,19 @@
             const response = await fetch(GPX_URL);
             if (!response.ok) throw new Error('네트워크 응답이 정상이 아닙니다.');
             const gpxText = await response.text();
-            
-            const parser = new DOMParser();
-            const gpxDom = parser.parseFromString(gpxText, "text/xml");
-            
-            const trkpts = gpxDom.getElementsByTagName('trkpt');
-            if (trkpts.length === 0) {
-                document.getElementById('gpx-loading').innerText = '유효한 GPX 경로(trkpt) 데이터가 없습니다.';
-                return;
+
+            if (typeof RunruunElevationEngine === 'undefined') {
+                throw new Error('RunRuun 고도 엔진(RunruunElevationEngine)을 불러올 수 없습니다.');
             }
 
-            for (let i = 0; i < trkpts.length; i++) {
-                const pt = trkpts[i];
-                const lat = parseFloat(pt.getAttribute('lat'));
-                const lon = parseFloat(pt.getAttribute('lon'));
-                const eleNode = pt.getElementsByTagName('ele')[0];
-                const ele = eleNode ? parseFloat(eleNode.textContent) : 0;
-                globalRawPoints.push({ lat, lon, ele });
-            }
+            const result = await RunruunElevationEngine.processGpx(gpxText, { profile: 'trail' });
+            const rawParsed = RunruunElevationEngine.parseGpx(gpxText);
 
-            processAndRender();
+            renderAnalysis(result, rawParsed.points);
 
         } catch (error) {
             console.error('GPX 로딩 에러:', error);
-            document.getElementById('gpx-loading').innerText = '데이터를 불러오는 데 실패했습니다. URL을 확인해주세요.';
+            document.getElementById('gpx-loading').innerText = '데이터를 불러오는 데 실패했습니다. URL을 확인해주세요. (' + error.message + ')';
         }
     }
 
