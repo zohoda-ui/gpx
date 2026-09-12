@@ -3,125 +3,445 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GPX Viewer</title>
+    <title>GPX 뷰어 | 트레일러닝 코스 분석</title>
     <!-- Google Fonts Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body {
+        *, *::before, *::after {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
-            background: #ffffff !important;
+        }
+        body {
+            background-color: #ffffff;
+            color: #111827;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            padding: 12px;
+        }
+        @media (min-width: 640px) {
+            body {
+                padding: 20px;
+            }
         }
         :root {
-            --primary-color: #10b981;
-            --primary-hover: #059669;
-            --primary-light: rgba(16, 185, 129, 0.1);
-            --bg-color: #ffffff;
-            --muted-bg: #f9fafb;
-            --text-color: #111827;
-            --muted-text: #6b7280;
-            --border-color: #e5e7eb;
+            --primary: #10b981;
+            --primary-dark: #059669;
+            --primary-light: rgba(16, 185, 129, 0.08);
+            --border: #e5e7eb;
             --card-bg: #ffffff;
-            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            --text-main: #111827;
+            --text-muted: #6b7280;
+            --text-sub: #9ca3af;
+            --bg-muted: #f9fafb;
         }
-        .gpx-viewer-wrapper {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
+        .gpx-container {
             width: 100%;
-            max-width: 900px;
+            max-width: 920px;
             margin: 0 auto;
-            border: 1px solid var(--border-color);
+            background: var(--card-bg);
+            border: 1px solid var(--border);
             border-radius: 16px;
             overflow: hidden;
-            box-shadow: var(--card-shadow);
-            background: var(--card-bg);
-            transition: all 0.3s ease;
-            height: auto;
-            max-height: fit-content;
+            box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.02);
         }
-        .gpx-map {
-            height: 380px;
-            width: 100%;
-            z-index: 1;
-        }
-        .gpx-chart-container {
-            position: relative;
-            height: 220px;
-            width: 100%;
-            padding: 16px 20px 8px 20px;
-            box-sizing: border-box;
-            background: var(--bg-color);
-            border-top: 1px solid var(--border-color);
-        }
-        #gpx-elevation-chart {
-            display: block;
-        }
-        @media (max-width: 768px) {
-            .gpx-map {
-                height: 260px;
-            }
-            .gpx-chart-container {
-                height: 180px;
-                padding: 12px 14px 4px 14px;
-            }
-        }
-        .gpx-summary {
+
+        /* 1. Header */
+        .gpx-header {
             display: flex;
-            justify-content: space-around;
-            padding: 14px 20px;
-            background: var(--muted-bg);
-            border-top: 1px solid var(--border-color);
-            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border);
+            background: #ffffff;
             gap: 12px;
         }
-        .summary-item {
+        .gpx-header-title-wrap {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+            flex: 1;
+        }
+        .gpx-header-accent {
+            width: 3.5px;
+            height: 16px;
+            background-color: var(--primary);
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+        .gpx-header-title {
+            font-size: 15px;
+            font-weight: 800;
+            color: var(--text-main);
+            letter-spacing: -0.02em;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .gpx-header-filename {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: 0;
+            flex: 1;
+            padding-left: 4px;
+        }
+        .gpx-header-actions {
+            flex-shrink: 0;
+        }
+        .btn-reupload {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 5px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            background: var(--bg-muted);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .btn-reupload:hover {
+            color: var(--primary-dark);
+            border-color: var(--primary);
+            background: var(--primary-light);
+        }
+
+        /* 2. Upload Section (Compact & Minimal) */
+        .gpx-upload-section {
+            padding: 28px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            background: #ffffff;
+        }
+        .upload-card {
+            width: 100%;
+            max-width: 440px;
+            padding: 24px 20px;
+            border: 2px dashed #d1d5db;
+            border-radius: 12px;
+            background: var(--bg-muted);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+        .upload-card:hover, .upload-card.drag-over {
+            border-color: var(--primary);
+            background: var(--primary-light);
+        }
+        .upload-icon {
+            width: 32px;
+            height: 32px;
+            color: var(--primary);
+            margin-bottom: 2px;
+        }
+        .upload-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+        .upload-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        .upload-btn {
+            margin-top: 6px;
+            padding: 7px 16px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #ffffff;
+            background-color: var(--primary);
+            border: none;
+            border-radius: 6px;
+            pointer-events: none;
+            box-shadow: 0 1px 3px rgba(16, 185, 129, 0.3);
+        }
+        .upload-input {
+            display: none;
+        }
+
+        /* Loading State */
+        .gpx-loading-state {
+            padding: 40px 20px;
+            text-align: center;
+            display: none;
+        }
+        .loading-spinner {
+            width: 28px;
+            height: 28px;
+            border: 3px solid #e5e7eb;
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 12px auto;
+        }
+        .loading-text {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 3. Main Result Section */
+        .gpx-result-section {
+            display: none;
+            flex-direction: column;
+        }
+
+        /* Map */
+        .gpx-map-container {
+            width: 100%;
+            height: 420px;
+            position: relative;
+            background: #f3f4f6;
+        }
+        @media (max-width: 640px) {
+            .gpx-map-container {
+                height: 300px;
+            }
+        }
+        #gpx-map {
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        .leaflet-container {
+            font-family: inherit;
+        }
+
+        /* Custom Map Marker Badges */
+        .map-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 800;
+            color: #ffffff;
+            padding: 2px 6px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.25);
+            border: 1.5px solid #ffffff;
+            white-space: nowrap;
+        }
+        .map-badge-start { background-color: #10b981; }
+        .map-badge-end { background-color: #ef4444; }
+
+        /* Elevation Chart */
+        .gpx-chart-section {
+            width: 100%;
+            height: 180px;
+            padding: 12px 16px 4px 16px;
+            background: #ffffff;
+            border-top: 1px solid var(--border);
+            position: relative;
+        }
+        @media (max-width: 640px) {
+            .gpx-chart-section {
+                height: 150px;
+                padding: 10px 10px 2px 10px;
+            }
+        }
+        #gpx-elevation-chart {
+            width: 100% !important;
+            height: 100% !important;
+            display: block;
+        }
+
+        /* Stats Cards (4 items) */
+        .gpx-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1px;
+            background: var(--border);
+            border-top: 1px solid var(--border);
+        }
+        @media (max-width: 600px) {
+            .gpx-stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        .stat-card {
+            background: #ffffff;
+            padding: 14px 10px;
             text-align: center;
             display: flex;
             flex-direction: column;
+            justify-content: center;
             gap: 4px;
         }
-        .summary-label {
+        .stat-label {
             font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            letter-spacing: 0.02em;
+        }
+        .stat-value {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--text-main);
+            letter-spacing: -0.02em;
+            line-height: 1.2;
+        }
+        .stat-value.val-gain {
+            color: #059669;
+        }
+        .stat-value.val-loss {
+            color: #2563eb;
+        }
+        .stat-value.val-vkm {
+            color: #d97706;
+        }
+
+        /* Difficulty Section */
+        .gpx-difficulty-section {
+            padding: 14px 18px;
+            background: var(--bg-muted);
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .diff-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .diff-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            color: var(--muted-text);
-            font-weight: 600;
         }
-        .summary-value {
-            font-size: 15px;
+        .diff-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 10px;
+            border-radius: 9999px;
+            font-size: 11px;
             font-weight: 700;
-            color: var(--text-color);
         }
-        .summary-value.highlight-green {
-            color: #10b981;
+        .diff-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+            line-height: 1.5;
         }
-        .summary-value.highlight-orange {
-            color: #f59e0b;
-        }
-        .gpx-loading {
-            padding: 40px;
+
+        /* Error state */
+        .gpx-error-box {
+            padding: 20px;
+            margin: 16px;
+            border-radius: 8px;
+            background: #fef2f2;
+            border: 1px solid #fee2e2;
+            color: #b91c1c;
+            font-size: 13px;
             text-align: center;
-            color: var(--muted-text);
-            font-size: 14px;
+            display: none;
         }
     </style>
 </head>
 <body>
 
-<div class="gpx-viewer-wrapper">
-    <div id="gpx-loading" class="gpx-loading">GPX 경로 데이터를 불러오는 중...</div>
-    <div id="gpx-map" class="gpx-map" style="display: none;"></div>
-    <div id="gpx-chart-container" class="gpx-chart-container" style="display: none;">
-        <canvas id="gpx-elevation-chart"></canvas>
+<div class="gpx-container">
+    <!-- Header -->
+    <header class="gpx-header">
+        <div class="gpx-header-title-wrap">
+            <span class="gpx-header-accent"></span>
+            <span class="gpx-header-title">GPX 뷰어</span>
+            <span id="headerFileName" class="gpx-header-filename"></span>
+        </div>
+        <div class="gpx-header-actions" id="headerActions" style="display: none;">
+            <button type="button" class="btn-reupload" onclick="resetUploadState()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                </svg>
+                다른 파일 선택
+            </button>
+        </div>
+    </header>
+
+    <!-- Error Box -->
+    <div id="gpxErrorBox" class="gpx-error-box"></div>
+
+    <!-- Upload Screen -->
+    <div id="gpxUploadSection" class="gpx-upload-section">
+        <div class="upload-card" id="dropZone" onclick="document.getElementById('gpxFileInput').click()">
+            <svg class="upload-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+            </svg>
+            <div class="upload-title">GPX 파일 선택</div>
+            <div class="upload-desc">파일을 드래그하거나 선택하세요 (.gpx)</div>
+            <button type="button" class="upload-btn">파일 선택</button>
+            <input type="file" id="gpxFileInput" class="upload-input" accept=".gpx,application/gpx+xml,application/xml,text/xml,text/plain,*/*" onchange="handleFileSelect(event)">
+        </div>
     </div>
-    <div id="gpx-summary" class="gpx-summary" style="display: none;">
-        <div class="summary-item"><span class="summary-label">총 거리</span><span class="summary-value" id="summary-distance">-</span></div>
-        <div class="summary-item"><span class="summary-label">누적 상승고도</span><span class="summary-value highlight-green" id="summary-ele-gain">-</span></div>
-        <div class="summary-item"><span class="summary-label">최고 / 최저 고도</span><span class="summary-value" id="summary-ele-maxmin">-</span></div>
-        <div class="summary-item"><span class="summary-label">v/km</span><span class="summary-value highlight-orange" id="summary-vkm">-</span></div>
+
+    <!-- Loading State -->
+    <div id="gpxLoadingState" class="gpx-loading-state">
+        <div class="loading-spinner"></div>
+        <div class="loading-text" id="loadingText">GPX 코스 데이터를 정밀 분석하는 중...</div>
+    </div>
+
+    <!-- Result Screen -->
+    <div id="gpxResultSection" class="gpx-result-section">
+        <!-- 1. MAP -->
+        <div class="gpx-map-container">
+            <div id="gpx-map"></div>
+        </div>
+
+        <!-- 2. ELEVATION GRAPH -->
+        <div class="gpx-chart-section">
+            <canvas id="gpx-elevation-chart"></canvas>
+        </div>
+
+        <!-- 3. STATS (4 Cards) -->
+        <div class="gpx-stats-grid">
+            <div class="stat-card">
+                <span class="stat-label">거리</span>
+                <span class="stat-value" id="statDistance">-</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">누적상승</span>
+                <span class="stat-value val-gain" id="statGain">-</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">누적하강</span>
+                <span class="stat-value val-loss" id="statLoss">-</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">V/KM</span>
+                <span class="stat-value val-vkm" id="statVkm">-</span>
+            </div>
+        </div>
+
+        <!-- 4. V/KM DIFFICULTY -->
+        <div class="gpx-difficulty-section">
+            <div class="diff-header">
+                <span class="diff-title">V/KM 난이도</span>
+                <span id="diffBadge" class="diff-badge">-</span>
+            </div>
+            <div id="diffDesc" class="diff-desc">-</div>
+        </div>
     </div>
 </div>
 
@@ -136,31 +456,167 @@
     const urlParams = new URLSearchParams(window.location.search);
     const GPX_URL = urlParams.get('url');
 
-    let gpxChartInstance = null;
     let mapInstance = null;
+    let gpxChartInstance = null;
     let hoverMarkerInstance = null;
+    let startMarkerInstance = null;
+    let endMarkerInstance = null;
     let displayChartData = [];
 
-    function renderAnalysis(result, rawPoints) {
-        const stats = result.stats;
-        const chartData = stats.chartData || [];
+    // Drag and Drop Event Handlers
+    const dropZone = document.getElementById('dropZone');
+    if (dropZone) {
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
+            dropZone.addEventListener(evt, e => {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+        });
+        ['dragenter', 'dragover'].forEach(evt => {
+            dropZone.addEventListener(evt, () => dropZone.classList.add('drag-over'));
+        });
+        ['dragleave', 'drop'].forEach(evt => {
+            dropZone.addEventListener(evt, () => dropZone.classList.remove('drag-over'));
+        });
+        dropZone.addEventListener('drop', e => {
+            if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                processGpxFile(e.dataTransfer.files[0]);
+            }
+        });
+    }
 
-        // 1. 요약 정보 업데이트 (RunRuun Production 정규 통계 사용)
+    function handleFileSelect(event) {
+        if (event.target.files && event.target.files.length > 0) {
+            processGpxFile(event.target.files[0]);
+        }
+    }
+
+    function showError(msg) {
+        const errBox = document.getElementById('gpxErrorBox');
+        errBox.innerText = msg;
+        errBox.style.display = 'block';
+        document.getElementById('gpxLoadingState').style.display = 'none';
+    }
+
+    function hideError() {
+        const errBox = document.getElementById('gpxErrorBox');
+        errBox.style.display = 'none';
+        errBox.innerText = '';
+    }
+
+    function resetUploadState() {
+        hideError();
+        document.getElementById('headerFileName').innerText = '';
+        document.getElementById('headerActions').style.display = 'none';
+        document.getElementById('gpxResultSection').style.display = 'none';
+        document.getElementById('gpxLoadingState').style.display = 'none';
+        document.getElementById('gpxUploadSection').style.display = 'flex';
+        document.getElementById('gpxFileInput').value = '';
+
+        if (mapInstance) {
+            mapInstance.remove();
+            mapInstance = null;
+        }
+        if (gpxChartInstance) {
+            gpxChartInstance.destroy();
+            gpxChartInstance = null;
+        }
+    }
+
+    async function processGpxFile(file) {
+        try {
+            hideError();
+            document.getElementById('gpxUploadSection').style.display = 'none';
+            document.getElementById('gpxLoadingState').style.display = 'block';
+            document.getElementById('loadingText').innerText = 'GPX 파일을 분석하는 중...';
+
+            const fileName = file.name || 'course.gpx';
+            const gpxText = await file.text();
+
+            await analyzeAndRender(gpxText, fileName);
+        } catch (err) {
+            console.error('File process error:', err);
+            showError('GPX 파일을 읽고 분석하는 데 실패했습니다: ' + err.message);
+        }
+    }
+
+    function updateDifficultyUI(vkm) {
+        const badge = document.getElementById('diffBadge');
+        const desc = document.getElementById('diffDesc');
+        let tier = '', bg = '', textCol = '', descText = '';
+
+        if (vkm < 20) {
+            tier = '쉬움 (V/km ' + vkm.toFixed(1) + ')';
+            bg = '#eff6ff';
+            textCol = '#2563eb';
+            descText = '임도가 많고 완만한 코스로 초보자 및 가벼운 트레일러닝에 적합합니다.';
+        } else if (vkm < 40) {
+            tier = '보통 (V/km ' + vkm.toFixed(1) + ')';
+            bg = '#ecfdf5';
+            textCol = '#059669';
+            descText = '트레일러닝 본연의 매력을 즐길 수 있는 오르막/내리막 균형 코스입니다.';
+        } else if (vkm < 60) {
+            tier = '어려움 (V/km ' + vkm.toFixed(1) + ')';
+            bg = '#fefce8';
+            textCol = '#ca8a04';
+            descText = '페이스 조절과 보급 전략이 요구되는 중상급 트레일레이스 코스입니다.';
+        } else if (vkm < 80) {
+            tier = '매우 어려움 (V/km ' + vkm.toFixed(1) + ')';
+            bg = '#fff7ed';
+            textCol = '#ea580c';
+            descText = '급경사가 반복되고 스틱 사용이 권장되는 고난도 산악 코스입니다.';
+        } else {
+            tier = '초고난도 (V/km ' + vkm.toFixed(1) + ')';
+            bg = '#fef2f2';
+            textCol = '#dc2626';
+            descText = '완주 자체가 거대한 도전인 최상위 난이도의 울트라 트레일 코스입니다.';
+        }
+
+        badge.innerText = tier;
+        badge.style.backgroundColor = bg;
+        badge.style.color = textCol;
+        badge.style.border = '1px solid ' + textCol + '33';
+        desc.innerText = descText;
+    }
+
+    async function analyzeAndRender(gpxText, fileName) {
+        if (typeof RunruunElevationEngine === 'undefined') {
+            throw new Error('고도 분석 엔진(RunruunElevationEngine)이 로드되지 않았습니다.');
+        }
+
+        const result = await RunruunElevationEngine.processGpx(gpxText, { profile: 'trail', filename: fileName });
+        const rawParsed = RunruunElevationEngine.parseGpx(gpxText);
+        const stats = result.stats;
+
+        // 1. 헤더 업데이트
+        document.getElementById('headerFileName').innerText = fileName;
+        document.getElementById('headerFileName').title = fileName;
+        document.getElementById('headerActions').style.display = 'block';
+
+        // 2. 통계 카드 업데이트
         const totalDist = typeof stats.totalDist === 'number' ? stats.totalDist : (stats.rawTotalDistKm || 0);
         const eleGain = typeof stats.eleGain === 'number' ? stats.eleGain : 0;
-        const maxEle = typeof stats.maxEle === 'number' ? stats.maxEle : 0;
-        const minEle = typeof stats.minEle === 'number' ? stats.minEle : 0;
+        const eleLoss = typeof stats.eleLoss === 'number' ? stats.eleLoss : 0;
         const vkm = typeof stats.vkm === 'number' ? stats.vkm : 0;
 
-        document.getElementById('summary-distance').innerText = totalDist.toFixed(2) + ' km';
-        document.getElementById('summary-ele-gain').innerText = Math.round(eleGain) + ' m';
-        document.getElementById('summary-ele-maxmin').innerText = Math.round(maxEle) + ' m / ' + Math.round(minEle) + ' m';
-        document.getElementById('summary-vkm').innerText = vkm.toFixed(1);
+        document.getElementById('statDistance').innerText = totalDist.toFixed(2) + ' km';
+        document.getElementById('statGain').innerText = '+' + Math.round(eleGain).toLocaleString() + ' m';
+        document.getElementById('statLoss').innerText = '-' + Math.round(eleLoss).toLocaleString() + ' m';
+        document.getElementById('statVkm').innerText = vkm.toFixed(1);
 
-        // 2. 지도 좌표
-        const path = (rawPoints && rawPoints.length > 0 ? rawPoints : (result.points || [])).map(pt => [pt.lat, pt.lon]);
+        // 3. 난이도 업데이트
+        updateDifficultyUI(vkm);
 
-        // 3. 차트 포인트 다운샘플링 (최대 800개)
+        // 4. 화면 전환
+        document.getElementById('gpxUploadSection').style.display = 'none';
+        document.getElementById('gpxLoadingState').style.display = 'none';
+        document.getElementById('gpxResultSection').style.display = 'flex';
+
+        // 5. 좌표 및 차트 준비
+        const rawPoints = rawParsed.points || [];
+        const pathCoords = (rawPoints.length > 0 ? rawPoints : (result.points || [])).map(pt => [pt.lat, pt.lon]);
+        const chartData = stats.chartData || [];
+
         const MAX_CHART_POINTS = 800;
         if (chartData.length > MAX_CHART_POINTS) {
             const step = Math.ceil(chartData.length / MAX_CHART_POINTS);
@@ -176,8 +632,79 @@
             displayChartData = chartData.slice();
         }
 
-        const dataPts = displayChartData.map(d => ({ x: parseFloat(d.x), y: parseFloat(d.y) }));
+        // 6. 지도 및 차트 렌더링
+        requestAnimationFrame(() => {
+            renderMap(pathCoords);
+            renderChart(displayChartData, stats.minEle, stats.maxEle);
+        });
+    }
 
+    function renderMap(pathCoords) {
+        if (!pathCoords || pathCoords.length === 0) return;
+
+        if (mapInstance) {
+            mapInstance.remove();
+            mapInstance = null;
+        }
+
+        const mapEl = document.getElementById('gpx-map');
+        mapInstance = L.map(mapEl, {
+            scrollWheelZoom: false,
+            zoomControl: true
+        });
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 18
+        }).addTo(mapInstance);
+
+        const primaryColor = '#10b981';
+        const polyline = L.polyline(pathCoords, {
+            color: primaryColor,
+            weight: 4.5,
+            opacity: 0.9,
+            lineJoin: 'round'
+        }).addTo(mapInstance);
+
+        // 출발 / 도착 마커
+        const startPt = pathCoords[0];
+        const endPt = pathCoords[pathCoords.length - 1];
+
+        const startIcon = L.divIcon({
+            className: 'custom-map-icon',
+            html: '<span class="map-badge map-badge-start">출발</span>',
+            iconSize: [32, 20],
+            iconAnchor: [16, 10]
+        });
+        const endIcon = L.divIcon({
+            className: 'custom-map-icon',
+            html: '<span class="map-badge map-badge-end">도착</span>',
+            iconSize: [32, 20],
+            iconAnchor: [16, 10]
+        });
+
+        startMarkerInstance = L.marker(startPt, { icon: startIcon }).addTo(mapInstance);
+        endMarkerInstance = L.marker(endPt, { icon: endIcon }).addTo(mapInstance);
+
+        hoverMarkerInstance = L.circleMarker([0, 0], {
+            radius: 6,
+            fillColor: primaryColor,
+            color: '#ffffff',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 1
+        });
+
+        setTimeout(() => {
+            if (mapInstance) {
+                mapInstance.invalidateSize();
+                mapInstance.fitBounds(polyline.getBounds(), { padding: [30, 30] });
+            }
+        }, 100);
+    }
+
+    function renderChart(data, minEle, maxEle) {
+        const dataPts = data.map(d => ({ x: parseFloat(d.x), y: parseFloat(d.y) }));
         const primaryColor = '#10b981';
         const textColor = '#6b7280';
         const gridColor = '#f3f4f6';
@@ -190,148 +717,118 @@
         const ctx = document.getElementById('gpx-elevation-chart').getContext('2d');
 
         if (gpxChartInstance) {
-            gpxChartInstance.data.datasets[0].data = dataPts;
-            gpxChartInstance.options.scales.y.min = yMin;
-            gpxChartInstance.options.scales.y.max = yMax;
-            gpxChartInstance.update();
-        } else {
-            gpxChartInstance = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    datasets: [{
-                        label: '고도 (m)',
-                        data: dataPts,
-                        borderColor: primaryColor,
-                        backgroundColor: 'rgba(16, 185, 129, 0.12)',
-                        borderWidth: 2,
-                        fill: true,
-                        pointRadius: 0,
-                        pointHoverRadius: 6,
-                        pointHoverBackgroundColor: primaryColor,
-                        pointHoverBorderColor: '#ffffff',
-                        pointHoverBorderWidth: 2,
-                        tension: 0.4
-                    }]
+            gpxChartInstance.destroy();
+            gpxChartInstance = null;
+        }
+
+        gpxChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: '고도 (m)',
+                    data: dataPts,
+                    borderColor: primaryColor,
+                    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                    borderWidth: 2,
+                    fill: true,
+                    pointRadius: 0,
+                    pointHoverRadius: 6,
+                    pointHoverBackgroundColor: primaryColor,
+                    pointHoverBorderColor: '#ffffff',
+                    pointHoverBorderWidth: 2,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'nearest', axis: 'x', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(17, 24, 39, 0.95)',
+                        titleColor: '#ffffff',
+                        bodyColor: '#ffffff',
+                        titleFont: { size: 11, family: 'Inter', weight: 'normal' },
+                        bodyFont: { size: 12, family: 'Inter', weight: 'bold' },
+                        padding: 8,
+                        cornerRadius: 6,
+                        displayColors: false,
+                        callbacks: {
+                            title: function(context) { return '거리: ' + context[0].parsed.x.toFixed(2) + ' km'; },
+                            label: function(context) { return '고도: ' + context.parsed.y.toFixed(1) + ' m'; }
+                        }
+                    }
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    layout: {
-                        padding: {
-                            bottom: 12,
-                            top: 8,
-                            left: 4,
-                            right: 4
-                        }
-                    },
-                    interaction: { mode: 'nearest', axis: 'x', intersect: false },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            backgroundColor: 'rgba(17, 24, 39, 0.95)',
-                            titleColor: '#ffffff',
-                            bodyColor: '#ffffff',
-                            titleFont: { size: 12, family: 'Inter', weight: 'normal' },
-                            bodyFont: { size: 13, family: 'Inter', weight: 'bold' },
-                            padding: 10,
-                            cornerRadius: 8,
-                            displayColors: false,
-                            callbacks: {
-                                title: function(context) { return '거리: ' + context[0].parsed.x.toFixed(2) + ' km'; },
-                                label: function(context) { return '고도: ' + context.parsed.y.toFixed(1) + ' m'; }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            type: 'linear',
-                            display: true,
-                            ticks: {
-                                maxTicksLimit: 10,
-                                color: textColor,
-                                font: { family: 'Inter', size: 10 },
-                                callback: function(value) { return value.toFixed(1) + ' km'; }
-                            },
-                            grid: { display: false }
+                scales: {
+                    x: {
+                        type: 'linear',
+                        display: true,
+                        ticks: {
+                            maxTicksLimit: 8,
+                            color: textColor,
+                            font: { family: 'Inter', size: 10 },
+                            callback: function(value) { return value.toFixed(1) + ' km'; }
                         },
-                        y: {
-                            display: true,
-                            min: yMin,
-                            max: yMax,
-                            ticks: { 
-                                color: textColor,
-                                font: { family: 'Inter', size: 10 },
-                                callback: function(value) { return value + ' m'; }
-                            },
-                            grid: { color: gridColor }
-                        }
+                        grid: { display: false }
                     },
-                    onHover: (e, activeElements) => {
-                        if (activeElements.length > 0) {
-                            const index = activeElements[0].index;
-                            const point = displayChartData[index];
-                            if (point && mapInstance && hoverMarkerInstance) {
-                                if (!mapInstance.hasLayer(hoverMarkerInstance)) hoverMarkerInstance.addTo(mapInstance);
-                                hoverMarkerInstance.setLatLng([point.lat, point.lon]);
-                            }
-                        } else {
-                            if (mapInstance && hoverMarkerInstance && mapInstance.hasLayer(hoverMarkerInstance)) {
-                                mapInstance.removeLayer(hoverMarkerInstance);
-                            }
+                    y: {
+                        display: true,
+                        min: yMin,
+                        max: yMax,
+                        ticks: {
+                            color: textColor,
+                            font: { family: 'Inter', size: 10 },
+                            callback: function(value) { return value + ' m'; }
+                        },
+                        grid: { color: gridColor }
+                    }
+                },
+                onHover: (e, activeElements) => {
+                    if (activeElements.length > 0) {
+                        const index = activeElements[0].index;
+                        const point = displayChartData[index];
+                        if (point && mapInstance && hoverMarkerInstance) {
+                            if (!mapInstance.hasLayer(hoverMarkerInstance)) hoverMarkerInstance.addTo(mapInstance);
+                            hoverMarkerInstance.setLatLng([point.lat, point.lon]);
+                        }
+                    } else {
+                        if (mapInstance && hoverMarkerInstance && mapInstance.hasLayer(hoverMarkerInstance)) {
+                            mapInstance.removeLayer(hoverMarkerInstance);
                         }
                     }
                 }
-            });
-        }
-        
-        // 4. 지도 그리기
-        if (!mapInstance) {
-            document.getElementById('gpx-loading').style.display = 'none';
-            document.getElementById('gpx-map').style.display = 'block';
-            document.getElementById('gpx-chart-container').style.display = 'block';
-            document.getElementById('gpx-summary').style.display = 'flex';
-
-            mapInstance = L.map('gpx-map', { scrollWheelZoom: false });
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(mapInstance);
-
-            const polyline = L.polyline(path, { color: primaryColor, weight: 5, opacity: 0.85, lineJoin: 'round' }).addTo(mapInstance);
-            
-            setTimeout(() => {
-                mapInstance.invalidateSize();
-                mapInstance.fitBounds(polyline.getBounds());
-            }, 200);
-
-            hoverMarkerInstance = L.circleMarker([0,0], { radius: 6, fillColor: primaryColor, color: '#ffffff', weight: 2, opacity: 1, fillOpacity: 1 });
-
-            if (gpxChartInstance) {
-                setTimeout(() => { gpxChartInstance.resize(); }, 150);
             }
-        }
+        });
     }
 
     async function initGpxViewer() {
+        if (!GPX_URL) {
+            // URL 파라미터가 없으면 업로드 화면 유지
+            return;
+        }
+
         try {
-            if (!GPX_URL) {
-                 document.getElementById('gpx-loading').innerHTML = 'GPX URL이 제공되지 않았습니다.<br>iframe 주소 뒤에 <code>?url=깃허브Raw주소</code>를 추가해주세요.';
-                 return;
-            }
+            document.getElementById('gpxUploadSection').style.display = 'none';
+            document.getElementById('gpxLoadingState').style.display = 'block';
 
             const response = await fetch(GPX_URL);
-            if (!response.ok) throw new Error('네트워크 응답이 정상이 아닙니다.');
+            if (!response.ok) throw new Error('GPX 데이터를 가져올 수 없습니다. (' + response.status + ')');
             const gpxText = await response.text();
 
-            if (typeof RunruunElevationEngine === 'undefined') {
-                throw new Error('RunRuun 고도 엔진(RunruunElevationEngine)을 불러올 수 없습니다.');
-            }
+            let fileName = 'course.gpx';
+            try {
+                const urlObj = new URL(GPX_URL, window.location.href);
+                const pathParts = urlObj.pathname.split('/');
+                const last = pathParts[pathParts.length - 1];
+                if (last && last.endsWith('.gpx')) fileName = decodeURIComponent(last);
+            } catch (e) {}
 
-            const result = await RunruunElevationEngine.processGpx(gpxText, { profile: 'trail' });
-            const rawParsed = RunruunElevationEngine.parseGpx(gpxText);
-
-            renderAnalysis(result, rawParsed.points);
-
+            await analyzeAndRender(gpxText, fileName);
         } catch (error) {
             console.error('GPX 로딩 에러:', error);
-            document.getElementById('gpx-loading').innerText = '데이터를 불러오는 데 실패했습니다. URL을 확인해주세요. (' + error.message + ')';
+            showError('데이터를 불러오는 데 실패했습니다: ' + error.message);
+            document.getElementById('gpxUploadSection').style.display = 'flex';
         }
     }
 
