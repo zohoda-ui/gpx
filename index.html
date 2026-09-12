@@ -203,28 +203,29 @@
         /* 3. Main Result Section */
         .gpx-result-section {
             display: none;
-            flex-direction: column;
+            width: 100%;
         }
 
         /* Map */
-        .gpx-map-container {
+        #gpx-map {
+            display: block;
             width: 100%;
-            height: 420px;
-            position: relative;
+            height: 400px;
+            min-height: 350px;
             background: #f3f4f6;
+            position: relative;
+            z-index: 1;
         }
         @media (max-width: 640px) {
-            .gpx-map-container {
+            #gpx-map {
                 height: 300px;
+                min-height: 280px;
             }
-        }
-        #gpx-map {
-            width: 100%;
-            height: 100%;
-            z-index: 1;
         }
         .leaflet-container {
             font-family: inherit;
+            width: 100%;
+            height: 100%;
         }
 
         /* Custom Map Marker Badges */
@@ -405,9 +406,7 @@
     <!-- Result Screen -->
     <div id="gpxResultSection" class="gpx-result-section">
         <!-- 1. MAP -->
-        <div class="gpx-map-container">
-            <div id="gpx-map"></div>
-        </div>
+        <div id="gpx-map"></div>
 
         <!-- 2. ELEVATION GRAPH -->
         <div class="gpx-chart-section">
@@ -584,16 +583,22 @@
             throw new Error('고도 분석 엔진(RunruunElevationEngine)이 로드되지 않았습니다.');
         }
 
+        // 1. GPX 파싱 및 기존 고도 엔진 처리
         const result = await RunruunElevationEngine.processGpx(gpxText, { profile: 'trail', filename: fileName });
         const rawParsed = RunruunElevationEngine.parseGpx(gpxText);
         const stats = result.stats;
 
-        // 1. 헤더 업데이트
+        // 2. 좌표 배열 생성
+        const rawPoints = rawParsed.points || [];
+        const pathCoords = (rawPoints.length > 0 ? rawPoints : (result.points || [])).map(pt => [pt.lat, pt.lon]);
+        const chartData = stats.chartData || [];
+
+        // 3. 헤더 정보 업데이트
         document.getElementById('headerFileName').innerText = fileName;
         document.getElementById('headerFileName').title = fileName;
         document.getElementById('headerActions').style.display = 'block';
 
-        // 2. 통계 카드 업데이트
+        // 4. 통계 카드 업데이트
         const totalDist = typeof stats.totalDist === 'number' ? stats.totalDist : (stats.rawTotalDistKm || 0);
         const eleGain = typeof stats.eleGain === 'number' ? stats.eleGain : 0;
         const eleLoss = typeof stats.eleLoss === 'number' ? stats.eleLoss : 0;
@@ -604,19 +609,15 @@
         document.getElementById('statLoss').innerText = '-' + Math.round(eleLoss).toLocaleString() + ' m';
         document.getElementById('statVkm').innerText = vkm.toFixed(1);
 
-        // 3. 난이도 업데이트
+        // 5. 난이도 업데이트
         updateDifficultyUI(vkm);
 
-        // 4. 화면 전환
+        // 6. 결과 컨테이너 먼저 표시 (DOM에 display: block 상태 확정)
         document.getElementById('gpxUploadSection').style.display = 'none';
         document.getElementById('gpxLoadingState').style.display = 'none';
-        document.getElementById('gpxResultSection').style.display = 'flex';
+        document.getElementById('gpxResultSection').style.display = 'block';
 
-        // 5. 좌표 및 차트 준비
-        const rawPoints = rawParsed.points || [];
-        const pathCoords = (rawPoints.length > 0 ? rawPoints : (result.points || [])).map(pt => [pt.lat, pt.lon]);
-        const chartData = stats.chartData || [];
-
+        // 7. 차트 다운샘플링 데이터 준비
         const MAX_CHART_POINTS = 800;
         if (chartData.length > MAX_CHART_POINTS) {
             const step = Math.ceil(chartData.length / MAX_CHART_POINTS);
@@ -632,11 +633,9 @@
             displayChartData = chartData.slice();
         }
 
-        // 6. 지도 및 차트 렌더링
-        requestAnimationFrame(() => {
-            renderMap(pathCoords);
-            renderChart(displayChartData, stats.minEle, stats.maxEle);
-        });
+        // 8. 렌더링 파이프라인 (지도 생성 -> 고도 그래프 생성)
+        renderMap(pathCoords);
+        renderChart(displayChartData, stats.minEle, stats.maxEle);
     }
 
     function renderMap(pathCoords) {
@@ -695,12 +694,19 @@
             fillOpacity: 1
         });
 
+        // 뷰포트 fit 및 리플로우 대응
+        mapInstance.fitBounds(polyline.getBounds(), { padding: [24, 24] });
         setTimeout(() => {
             if (mapInstance) {
                 mapInstance.invalidateSize();
-                mapInstance.fitBounds(polyline.getBounds(), { padding: [30, 30] });
+                mapInstance.fitBounds(polyline.getBounds(), { padding: [24, 24] });
             }
-        }, 100);
+        }, 50);
+        setTimeout(() => {
+            if (mapInstance) {
+                mapInstance.invalidateSize();
+            }
+        }, 200);
     }
 
     function renderChart(data, minEle, maxEle) {
