@@ -130,7 +130,7 @@
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <!-- RunRuun Elevation Engine (Production Standard) -->
-<script src="runruun-elevation.js"></script>
+<script src="runruun-elevation.js?v=20261012"></script>
 
 <script>
     const urlParams = new URLSearchParams(window.location.search);
@@ -146,7 +146,9 @@
         const chartData = stats.chartData || [];
 
         // 1. 요약 정보 업데이트 (RunRuun Production 정규 통계 사용)
-        const totalDist = typeof stats.totalDist === 'number' ? stats.totalDist : (stats.rawTotalDistKm || 0);
+        const totalDist = (typeof stats.rawTotalDistKm === 'number' && !isNaN(stats.rawTotalDistKm) && stats.rawTotalDistKm > 0)
+            ? stats.rawTotalDistKm
+            : (typeof stats.totalDist === 'number' && !isNaN(stats.totalDist) ? stats.totalDist : 0);
         const eleGain = typeof stats.eleGain === 'number' ? stats.eleGain : 0;
         const maxEle = typeof stats.maxEle === 'number' ? stats.maxEle : 0;
         const minEle = typeof stats.minEle === 'number' ? stats.minEle : 0;
@@ -324,10 +326,15 @@
                 throw new Error('RunRuun 고도 엔진(RunruunElevationEngine)을 불러올 수 없습니다.');
             }
 
-            const result = await RunruunElevationEngine.processGpx(gpxText, { profile: 'trail' });
+            const requestedProfile = urlParams.get('profile');
+            const profile = (requestedProfile === 'road' || requestedProfile === 'trail')
+                ? requestedProfile
+                : (GPX_URL && (GPX_URL.toLowerCase().includes('-road') || GPX_URL.toLowerCase().includes('marathon')) ? 'road' : 'trail');
+
+            const result = await RunruunElevationEngine.processGpx(gpxText, { profile: profile });
             const rawParsed = RunruunElevationEngine.parseGpx(gpxText);
 
-            renderAnalysis(result, rawParsed.points);
+            renderAnalysis(result, Array.isArray(rawParsed) ? rawParsed : (rawParsed.points || []));
 
         } catch (error) {
             console.error('GPX 로딩 에러:', error);

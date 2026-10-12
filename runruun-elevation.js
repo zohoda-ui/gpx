@@ -16,11 +16,12 @@
       key: 'trail',
       name: '트레일러닝 (Trail Profile)',
       repository: 'gpx',
-      description: '트레일 전용: 공간 가우시안 필터 (Sigma 15m), 경사도 45% 제한, 데드밴드 2.0m',
+      description: '트레일 전용: 공간 가우시안 필터 (Sigma 15m), 경사도 45% 제한, 데드밴드 1.0m',
       resampleIntervalMeters: 5.0,
       maxSlopeGradient: 0.45,
       gaussianSigmaMeters: 15.0,
-      deadbandMeters: 2.0,
+      gainGaussianSigmaMeters: 15.0,
+      deadbandMeters: 1.0,
       hysteresisThresholdMeters: 2.0,
       minChangeDistanceMeters: 10.0,
       medianWindow: 3,
@@ -31,10 +32,11 @@
       key: 'road',
       name: '로드마라톤 (Road Profile)',
       repository: 'gpx-road',
-      description: '로드마라톤 전용: 공간 가우시안 필터 (Sigma 35m), 경사도 15% 제한, 데드밴드 3.0m',
+      description: '로드마라톤 전용: 표시 가우시안 60m, 누적계산 가우시안 60m, 경사도 15% 제한, 데드밴드 3.0m',
       resampleIntervalMeters: 10.0,
       maxSlopeGradient: 0.15,
-      gaussianSigmaMeters: 35.0,
+      gaussianSigmaMeters: 60.0,
+      gainGaussianSigmaMeters: 60.0,
       deadbandMeters: 3.0,
       hysteresisThresholdMeters: 3.0,
       minChangeDistanceMeters: 20.0,
@@ -380,8 +382,177 @@
       return result;
     },
 
-    calculateStats: function (points, profileKey = 'road', rawDistanceKm = null) {
+    /**
+     * 로드마라톤 전용 피봇 기반 상승/하강 계산 (기존 운영 로직 100% 보존)
+     */
+    calculateElevationGainLoss: function (points, excursionThreshold = 3.0) {
+      if (!points || points.length <= 1) {
+        return { eleGain: 0, eleLoss: 0, segments: [] };
+      }
+
+      let trend = 0; // 1: 상승 추세, -1: 하강 추세
+      let lastPivot = { dist: points[0].dist, ele: points[0].ele, type: 'START', idx: 0 };
+      let candidatePeak = lastPivot;
+      let candidateValley = lastPivot;
+      const confirmedPivots = [lastPivot];
+
+      for (let i = 1; i < points.length; i++) {
+        const curEle = points[i].ele;
+        const curDist = points[i].dist;
+
+        if (trend === 0) {
+          if (curEle - lastPivot.ele >= excursionThreshold) {
+            trend = 1;
+            candidatePeak = { dist: curDist, ele: curEle, type: 'PEAK', idx: i };
+          } else if (lastPivot.ele - curEle >= excursionThreshold) {
+            trend = -1;
+            candidateValley = { dist: curDist, ele: curEle, type: 'VALLEY', idx: i };
+          }
+        } else if (trend === 1) {
+          if (curEle > candidatePeak.ele) {
+            candidatePeak = { dist: curDist, ele: curEle, type: 'PEAK', idx: i };
+          } else if (candidatePeak.ele - curEle >= excursionThreshold) {
+            // 하강 반전 확정 -> candidatePeak 피봇 등록
+            confirmedPivots.push(candidatePeak);
+            lastPivot = candidatePeak;
+            trend = -1;
+            candidateValley = { dist: curDist, ele: curEle, type: 'VALLEY', idx: i };
+          }
+        } else if (trend === -1) {
+          if (curEle < candidateValley.ele) {
+            candidateValley = { dist: curDist, ele: curEle, type: 'VALLEY', idx: i };
+          } else if (curEle - candidateValley.ele >= excursionThreshold) {
+            // 상승 반전 확정 -> candidateValley 피봇 등록
+            confirmedPivots.push(candidateValley);
+            lastPivot = candidateValley;
+            trend = 1;
+            candidatePeak = { dist: curDist, ele: curEle, type: 'PEAK', idx: i };
+          }
+        }
+      }
+
+      // 종점 피봇 등록
+      const lastPt = { dist: points[points.length - 1].dist, ele: points[points.length - 1].ele, type: 'END', idx: points.length - 1 };
+      if (trend === 1) {
+        confirmedPivots.push(candidatePeak);
+      } else if (trend === -1) {
+        confirmedPivots.push(candidateValley);
+      }
+      confirmedPivots.push(lastPt);
+
+      // 상승/하강 누적 집계
+      let eleGain = 0;
+      let eleLoss = 0;
+      const segments = [];
+
+      for (let i = 1; i < confirmedPivots.length; i++) {
+        const p1 = confirmedPivots[i - 1];
+        const p2 = confirmedPivots[i];
+        const deltaEle = p2.ele - p1.ele;
+        const deltaDist = p2.dist - p1.dist;
+
+        if (deltaEle > 0) {
+          eleGain += deltaEle;
+          segments.push({ type: 'CLIMB', startDist: p1.dist, endDist: p2.dist, gain: deltaEle, loss: 0 });
+        } else if (deltaEle < 0) {
+          eleLoss += Math.abs(deltaEle);
+          segments.push({ type: 'DESCENT', startDist: p1.dist, endDist: p2.dist, gain: 0, loss: Math.abs(deltaEle) });
+        }
+      }
+
+      return {
+        eleGain: Math.round(eleGain),
+        eleLoss: Math.round(eleLoss),
+        segments: segments,
+        pivots: confirmedPivots
+      };
+    },
+
+    /**
+     * 트레일러닝 전용 피크-밸리 데드밴드 및 결측 구간 단절 리셋 알고리즘
+     */
+    calculateTrailElevationGainLoss: function (points, deadband = 1.0) {
       if (!points || points.length === 0) {
+        return { eleGain: 0, eleLoss: 0 };
+      }
+
+      let eleGain = 0;
+      let eleLoss = 0;
+      let minTrackElev = null;
+      let maxTrackElev = null;
+      let direction = 0;
+      let wasGap = false;
+
+      // 첫 번째 유효 고도값 탐색
+      let startIdx = 0;
+      while (startIdx < points.length) {
+        const e0 = points[startIdx].ele;
+        if (typeof e0 === 'number' && !isNaN(e0)) {
+          minTrackElev = e0;
+          maxTrackElev = e0;
+          break;
+        }
+        startIdx++;
+      }
+
+      if (minTrackElev !== null) {
+        for (let i = startIdx + 1; i < points.length; i++) {
+          const cur = points[i].ele;
+          // 결측값(null, undefined, NaN) 처리: 결측 구간을 건너뛰면서 직후 포인트와 인위적으로 연결되지 않도록 플래그 설정
+          if (cur === null || typeof cur !== 'number' || isNaN(cur)) {
+            wasGap = true;
+            continue;
+          }
+
+          // 결측 후 복귀 시: 직전 고도와 단절 처리하고 현재 고도 기준으로 상태 머신 리셋
+          if (wasGap) {
+            minTrackElev = cur;
+            maxTrackElev = cur;
+            direction = 0;
+            wasGap = false;
+            continue;
+          }
+
+          if (direction === 0) {
+            if (cur - minTrackElev >= deadband) {
+              eleGain += (cur - minTrackElev);
+              maxTrackElev = cur;
+              direction = 1;
+            } else if (maxTrackElev - cur >= deadband) {
+              eleLoss += (maxTrackElev - cur);
+              minTrackElev = cur;
+              direction = -1;
+            }
+          } else if (direction === 1) {
+            if (cur > maxTrackElev) {
+              eleGain += (cur - maxTrackElev);
+              maxTrackElev = cur;
+            } else if (maxTrackElev - cur >= deadband) {
+              eleLoss += (maxTrackElev - cur);
+              minTrackElev = cur;
+              direction = -1;
+            }
+          } else if (direction === -1) {
+            if (cur < minTrackElev) {
+              eleLoss += (minTrackElev - cur);
+              minTrackElev = cur;
+            } else if (cur - minTrackElev >= deadband) {
+              eleGain += (cur - minTrackElev);
+              maxTrackElev = cur;
+              direction = 1;
+            }
+          }
+        }
+      }
+
+      return {
+        eleGain: Math.round(eleGain),
+        eleLoss: Math.round(eleLoss)
+      };
+    },
+
+    calculateStats: function (displayPoints, profileKey = 'road', rawDistanceKm = null, gainPoints = null) {
+      if (!displayPoints || displayPoints.length === 0) {
         return {
           totalDist: 0,
           rawTotalDistKm: 0,
@@ -395,27 +566,49 @@
         };
       }
 
+      const isTrail = (profileKey === 'trail');
       const profile = PROFILES[profileKey] || PROFILES.road;
-      const deadband = profile.deadbandMeters || 3.0;
+      const defaultDeadband = isTrail ? 1.0 : 3.0;
+      const deadband = (profile && typeof profile.deadbandMeters === 'number' && !isNaN(profile.deadbandMeters) && profile.deadbandMeters >= 0)
+        ? profile.deadbandMeters
+        : defaultDeadband;
 
-      let minEle = points[0].ele;
-      let maxEle = points[0].ele;
+      // 1. 최고/최저 고도 산출 (로드: 기존 displayPoints 기준 / 트레일: 원본 gainPoints 기준)
+      let minEle = 0;
+      let maxEle = 0;
 
-      for (let i = 0; i < points.length; i++) {
-        const val = points[i].ele;
-        if (val < minEle) minEle = val;
-        if (val > maxEle) maxEle = val;
+      if (isTrail) {
+        const refPoints = (gainPoints && gainPoints.length > 0) ? gainPoints : displayPoints;
+        minEle = refPoints[0].ele;
+        maxEle = refPoints[0].ele;
+        for (let i = 0; i < refPoints.length; i++) {
+          const val = refPoints[i].ele;
+          if (val !== null && typeof val === 'number' && !isNaN(val)) {
+            if (val < minEle) minEle = val;
+            if (val > maxEle) maxEle = val;
+          }
+        }
+      } else {
+        // 로드마라톤 기존 동작 100% 보존
+        minEle = displayPoints[0].ele;
+        maxEle = displayPoints[0].ele;
+        for (let i = 0; i < displayPoints.length; i++) {
+          const val = displayPoints[i].ele;
+          if (val < minEle) minEle = val;
+          if (val > maxEle) maxEle = val;
+        }
       }
 
+      // 2. 거리 계산
       const distArrayMeters = [0];
       let runningDistMeters = 0;
-      for (let i = 1; i < points.length; i++) {
-        if (points[i].dist !== undefined && points[i - 1].dist !== undefined) {
-          runningDistMeters = points[i].dist * 1000;
+      for (let i = 1; i < displayPoints.length; i++) {
+        if (displayPoints[i].dist !== undefined && displayPoints[i - 1].dist !== undefined) {
+          runningDistMeters = displayPoints[i].dist * 1000;
         } else {
           runningDistMeters += this.haversineDistanceMeters(
-            points[i - 1].lat, points[i - 1].lon,
-            points[i].lat, points[i].lon
+            displayPoints[i - 1].lat, displayPoints[i - 1].lon,
+            displayPoints[i].lat, displayPoints[i].lon
           );
         }
         distArrayMeters.push(runningDistMeters);
@@ -424,50 +617,28 @@
       const totalDistMeters = distArrayMeters[distArrayMeters.length - 1];
       const totalDistKm = (rawDistanceKm !== null && rawDistanceKm > 0) ? rawDistanceKm : (totalDistMeters / 1000);
 
+      // 3. 누적 상승/하강 계산 (로드와 트레일 완전 분리)
       let eleGain = 0;
       let eleLoss = 0;
-      let minTrackElev = points[0].ele;
-      let maxTrackElev = points[0].ele;
-      let direction = 0;
+      const targetGainPoints = (gainPoints && gainPoints.length > 0) ? gainPoints : displayPoints;
 
-      for (let i = 1; i < points.length; i++) {
-        const cur = points[i].ele;
-
-        if (direction === 0) {
-          if (cur - minTrackElev >= deadband) {
-            eleGain += (cur - minTrackElev);
-            maxTrackElev = cur;
-            direction = 1;
-          } else if (maxTrackElev - cur >= deadband) {
-            eleLoss += (maxTrackElev - cur);
-            minTrackElev = cur;
-            direction = -1;
-          }
-        } else if (direction === 1) {
-          if (cur > maxTrackElev) {
-            eleGain += (cur - maxTrackElev);
-            maxTrackElev = cur;
-          } else if (maxTrackElev - cur >= deadband) {
-            eleLoss += (maxTrackElev - cur);
-            minTrackElev = cur;
-            direction = -1;
-          }
-        } else if (direction === -1) {
-          if (cur < minTrackElev) {
-            eleLoss += (minTrackElev - cur);
-            minTrackElev = cur;
-          } else if (cur - minTrackElev >= deadband) {
-            eleGain += (cur - minTrackElev);
-            maxTrackElev = cur;
-            direction = 1;
-          }
-        }
+      if (isTrail) {
+        // 트레일 전용 계산 (피크 깎임 방지 및 결측 단절)
+        const trailResult = this.calculateTrailElevationGainLoss(targetGainPoints, deadband);
+        eleGain = trailResult.eleGain;
+        eleLoss = trailResult.eleLoss;
+      } else {
+        // 로드마라톤 전용 피봇 계산 (기존 운영 알고리즘 100% 동일)
+        const roadResult = this.calculateElevationGainLoss(targetGainPoints, deadband);
+        eleGain = roadResult.eleGain;
+        eleLoss = roadResult.eleLoss;
       }
 
       const vkm = totalDistKm > 0 ? (eleGain / totalDistKm) : 0;
 
+      // 4. 차트 데이터 생성 (displayPoints 기준)
       let accumDist = 0;
-      const chartData = points.map((p, idx) => {
+      const chartData = displayPoints.map((p, idx) => {
         accumDist = distArrayMeters[idx] / 1000;
         return {
           x: Math.round(accumDist * 100) / 100,
@@ -478,7 +649,8 @@
       });
 
       return {
-        totalDist: Math.round(totalDistKm * 10) / 10,
+        // 로드는 기존 42.2km 형태(소수점 1자리) 보존, 트레일은 차트 x종점과 100% 일치(소수점 2자리)
+        totalDist: isTrail ? (Math.round(totalDistKm * 100) / 100) : (Math.round(totalDistKm * 10) / 10),
         rawTotalDistKm: totalDistKm,
         eleGain: Math.round(eleGain),
         eleLoss: Math.round(eleLoss),
@@ -719,12 +891,37 @@
       // 3. 물리적 경사도 한계 이상치 보정 (Gradient Spike Limiter)
       finalPoints = this.limitGradientSpikes(finalPoints, profile.maxSlopeGradient);
 
-      // 4. 공간 가우시안 스무딩 (Spatial Gaussian Filter)
-      finalPoints = this.spatialGaussianSmooth(finalPoints, profile.gaussianSigmaMeters, profile.resampleIntervalMeters);
+      // 4. [Display Elevation] 공간 가우시안 스무딩 (Spatial Gaussian Filter) - 차트 표시용
+      const displayPoints = this.spatialGaussianSmooth(finalPoints, profile.gaussianSigmaMeters, profile.resampleIntervalMeters);
 
-      // 5. 데드밴드 피크-밸리 통계 계산 -> 거리, D+, D-, V/km 산출
-      const stats = this.calculateStats(finalPoints, profileKey, rawDistanceKm);
-      const result = { points: finalPoints, stats: stats, profile: profileKey, profileName: profile.name };
+      // 5. [Gain Elevation] 누적상승고도 계산용 포인트:
+      // 트레일 프로필이고 원본 고도가 존재하는 경우, 가우시안 필터로 산 정상이 깎여나가지 않도록 원본 고도 포인트를 활용.
+      // 로드 프로필은 기존 동작 100% 유지 (gainGaussianSigmaMeters 스무딩)
+      let gainPoints = null;
+      if (profileKey === 'trail' && hasElevations && !forceDemFetch) {
+        let accKm = 0;
+        gainPoints = rawPoints.map((p, idx) => {
+          if (idx > 0) {
+            accKm += this.haversineDistanceMeters(rawPoints[idx - 1].lat, rawPoints[idx - 1].lon, p.lat, p.lon) / 1000;
+          }
+          return { ...p, dist: accKm };
+        });
+      } else {
+        const gainSigma = profile.gainGaussianSigmaMeters || profile.gaussianSigmaMeters;
+        gainPoints = (gainSigma === profile.gaussianSigmaMeters)
+          ? displayPoints
+          : this.spatialGaussianSmooth(finalPoints, gainSigma, profile.resampleIntervalMeters);
+      }
+
+      // 6. 통계 계산 -> 거리, D+, D-, V/km 산출
+      const stats = this.calculateStats(displayPoints, profileKey, rawDistanceKm, gainPoints);
+      const result = {
+        points: displayPoints,
+        gainPoints: gainPoints,
+        stats: stats,
+        profile: profileKey,
+        profileName: profile.name
+      };
 
       setCachedResult(cacheKey, result);
       return result;
